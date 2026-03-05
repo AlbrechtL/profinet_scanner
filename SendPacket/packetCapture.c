@@ -5,6 +5,33 @@
 pcap_t *adhandle;
 clock_t t1_G;
 
+static int getPndcpOffset(const u_char* pkt_data, bpf_u_int32 caplen)
+{
+	if (!pkt_data || caplen < 14) {
+		return -1;
+	}
+
+	int offset = 12;
+	u_short etherType = (u_short)((pkt_data[offset] << 8) | pkt_data[offset + 1]);
+	offset += 2;
+
+	while ((etherType == 0x8100 || etherType == 0x88A8) && caplen >= (bpf_u_int32)(offset + 4)) {
+		offset += 2;
+		etherType = (u_short)((pkt_data[offset] << 8) | pkt_data[offset + 1]);
+		offset += 2;
+	}
+
+	if (etherType != 0x8892) {
+		return -1;
+	}
+
+	if (caplen < (bpf_u_int32)(offset + (int)sizeof(profinet_prot))) {
+		return -1;
+	}
+
+	return offset;
+}
+
 
 
 /* Callback function invoked by libpcap for every incoming packet only for dcp packets*/
@@ -28,9 +55,13 @@ void packet_handler_dcp(u_char* param, const struct pcap_pkthdr *header, const u
 	// retrieve ethernet header
 	ethh = (ethernet_header*)(pkt_data);
 
+	int pndcpOffset = getPndcpOffset(pkt_data, header->caplen);
+	if (pndcpOffset < 0) {
+		return;
+	}
 
 	// protocoll DCP
-	profinet = (profinet_prot *)(pkt_data + 14); //length of ethernet header
+	profinet = (profinet_prot *)(pkt_data + pndcpOffset);
 
 	if (profinet == NULL){
 		//	exit = true;
@@ -51,7 +82,7 @@ void packet_handler_dcp(u_char* param, const struct pcap_pkthdr *header, const u
 
 	recData = createDatasheet();
 	while (bl_count < ntohs(profinet->dataLength)){
-		pn_block = (pn_data*)(pkt_data + 14 + 12 + bl_count);// 14 ethernet header, 12 rpc header + blocklength of used blocks
+		pn_block = (pn_data*)(pkt_data + pndcpOffset + 12 + bl_count);// pndcp header + blocklength of used blocks
 		pn_block->blocklength = ntohs(pn_block->blocklength);
 		pn_block->blocklength += pn_block->blocklength % 2;
 
@@ -64,19 +95,19 @@ void packet_handler_dcp(u_char* param, const struct pcap_pkthdr *header, const u
 				break;
 			case SUBOPT_IPO_IPParameter:;
 
-				ip_address *src_IP = ((ip_address*)(pkt_data + 14 + 12 + bl_count + 6));
+				ip_address *src_IP = ((ip_address*)(pkt_data + pndcpOffset + 12 + bl_count + 6));
 				recData->deviceIp.byte1 = src_IP->byte1;
 				recData->deviceIp.byte2 = src_IP->byte2;
 				recData->deviceIp.byte3 = src_IP->byte3;
 				recData->deviceIp.byte4 = src_IP->byte4;
 
-				ip_address *subnetmask = ((ip_address*)(pkt_data + 14 + 12 + bl_count + 6 + 4));
+				ip_address *subnetmask = ((ip_address*)(pkt_data + pndcpOffset + 12 + bl_count + 6 + 4));
 				recData->subnetmask.byte1 = subnetmask->byte1;
 				recData->subnetmask.byte2 = subnetmask->byte2;
 				recData->subnetmask.byte3 = subnetmask->byte3;
 				recData->subnetmask.byte4 = subnetmask->byte4;
 
-				ip_address *defaultGateway = ((ip_address*)(pkt_data + 14 + 12 + bl_count + 6 + 4 + 4));
+				ip_address *defaultGateway = ((ip_address*)(pkt_data + pndcpOffset + 12 + bl_count + 6 + 4 + 4));
 				recData->defaultGateway.byte1 = defaultGateway->byte1;
 				recData->defaultGateway.byte2 = defaultGateway->byte2;
 				recData->defaultGateway.byte3 = defaultGateway->byte3;
@@ -487,7 +518,7 @@ int captureDCPPackets(threadData_t* threadData){
 	int i = 0;
 	char errbuf[PCAP_ERRBUF_SIZE];
 	u_int netmask;
-	char packet_filter[] = "ether proto 0x8892";
+	char packet_filter[] = "ether proto 0x8892 or (vlan and ether proto 0x8892) or (vlan and vlan and ether proto 0x8892)";
 
 	struct bpf_program fcode;
 
