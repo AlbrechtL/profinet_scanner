@@ -7,6 +7,8 @@
 
 rpc_activity* activityIM = NULL;
 
+int netAdapterNmb = 0;
+
 
 
 
@@ -815,7 +817,6 @@ int sendpacket_IM(threadData_t* threadData, int deviceNumber, u_short parameterI
 	packet_IM[63] = currentDevice->device->deviceId & 0xFF;
 
 	// vendor id
-	currentDevice->device->vendorId;
 	packet_IM[64] = currentDevice->device->vendorId >> 8;
 	packet_IM[65] = currentDevice->device->vendorId & 0xFF;
 

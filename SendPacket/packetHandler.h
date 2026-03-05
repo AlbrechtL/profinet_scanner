@@ -11,7 +11,7 @@
 #define TIMEOUT4 4000
 #define TIMEOUT  8000
 
-int netAdapterNmb;
+extern int netAdapterNmb;
 extern unsigned int seqNumberCounter;
 extern unsigned short identnmb;
 

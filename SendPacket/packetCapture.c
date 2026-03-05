@@ -188,13 +188,11 @@ void packet_handler_dcp(u_char* param, const struct pcap_pkthdr *header, const u
 	strftime(timestr, sizeof timestr, "%H:%M:%S", &ltime);
 
 	//print timestamp and length of the packet 
-	printf("%s.%.6d len:%d  %02x:%02x:%02x:%02x:%02x:%02x\n", timestr, header->ts.tv_usec, header->len,
+	printf("%s.%06ld len:%d  %02x:%02x:%02x:%02x:%02x:%02x\n", timestr, (long)header->ts.tv_usec, header->len,
 		ethh->src_addrK.byte1, ethh->src_addrK.byte2, ethh->src_addrK.byte3, ethh->src_addrK.byte4, ethh->src_addrK.byte5, ethh->src_addrK.byte6);
 
 	// check first, if it is NULL malloc the first box
 	linked_list_t* tmp = threadData->first;
-	int sizeLinkedList = linkedlist_status(tmp);
-
 	if (tmp == NULL)
 	{
 		threadData->first = malloc(sizeof(linked_list_t));
@@ -333,14 +331,12 @@ void packet_handler_IP(u_char* param, const struct pcap_pkthdr *header, const u_
 	strftime(timestr, sizeof timestr, "%H:%M:%S", &ltime);
 
 	//print timestamp and length of the packet
-	printf("%s.%.6d len:%d  %d.%d.%d.%d\n", timestr, header->ts.tv_usec, header->len, ih->saddr.byte1, ih->saddr.byte2, ih->saddr.byte3, ih->saddr.byte4);
+	printf("%s.%06ld len:%d  %d.%d.%d.%d\n", timestr, (long)header->ts.tv_usec, header->len, ih->saddr.byte1, ih->saddr.byte2, ih->saddr.byte3, ih->saddr.byte4);
 
 	// check first, if it is NULL malloc the first box
 	linked_list_t* tmpList = threadData->first;
 
 
-
-	int sizeLinkedList = linkedlist_status(tmpList);
 
 	// check if the deviceType is Unkown
 	// if so, store the handle
@@ -394,7 +390,6 @@ void packet_handler_IP(u_char* param, const struct pcap_pkthdr *header, const u_
 void packet_handler_ImplicitRead(threadData_t* threadData, const struct pcap_pkthdr *header, const u_char * pkt_data){
 	ip_header *ih;
 	udp_header *uh;
-	ethernet_header *ethh;
 	u_int ip_len;
 	DCE_RPC_IM_CALL *dcerpccall;
 
@@ -405,18 +400,6 @@ void packet_handler_ImplicitRead(threadData_t* threadData, const struct pcap_pkt
 	// convert the timestamp to readable format
 	local_tv_sec = header->ts.tv_sec;
 	localtime_s(&ltime, &local_tv_sec);
-
-
-	ethh = (ethernet_header*)(pkt_data);
-
-	// get mac address of sender to compare it later
-	mac_address devMAC;
-	devMAC.byte1 = ethh->src_addrK.byte1;
-	devMAC.byte2 = ethh->src_addrK.byte2;
-	devMAC.byte3 = ethh->src_addrK.byte3;
-	devMAC.byte4 = ethh->src_addrK.byte4;
-	devMAC.byte5 = ethh->src_addrK.byte5;
-	devMAC.byte6 = ethh->src_addrK.byte6;
 
 
 	// retireve the position of the ip header
@@ -452,15 +435,11 @@ void packet_handler_ImplicitRead(threadData_t* threadData, const struct pcap_pkt
 	// get address of the last byte of the rpc packet which is serialLow and add 1
 	// check if this is necessary
 	pn_ReadImplicit * pn_readimplicit = (pn_ReadImplicit*)(((u_char*)(&(dcerpccall->serialLow))) + 1);
-	// get length of rpc fragment
-	int lengthOfPN_Read = dcerpccall->fragmentLen;
-
-
 	/* convert the timestamp to readable format */
 	strftime(timestr, sizeof timestr, "%H:%M:%S", &ltime);
 
 	//print timestamp and length of the packet
-	printf("%s.%.6d len:%d  %d.%d.%d.%d\n", timestr, header->ts.tv_usec, header->len, ih->saddr.byte1, ih->saddr.byte2, ih->saddr.byte3, ih->saddr.byte4);
+	printf("%s.%06ld len:%d  %d.%d.%d.%d\n", timestr, (long)header->ts.tv_usec, header->len, ih->saddr.byte1, ih->saddr.byte2, ih->saddr.byte3, ih->saddr.byte4);
 
 	if (pn_readimplicit->errorDecode == 0x80) // error decode PNIORW
 		return;
@@ -540,7 +519,7 @@ int captureDCPPackets(threadData_t* threadData){
 
 	if (d->addresses != NULL)
 		/* Retrieve the mask of the first address of the interface */
-		netmask = ((struct sockaddr_in *)(d->addresses->netmask))->sin_addr.S_un.S_addr;
+		netmask = ((struct sockaddr_in *)(d->addresses->netmask))->sin_addr.s_addr;
 	else
 		/* If the interface is without addresses we suppose to be in a C class network */
 		netmask = 0xffffff;
@@ -621,7 +600,7 @@ int captureIPPackets(threadData_t* threadData){
 
 	if (d->addresses != NULL)
 		/* Retrieve the mask of the first address of the interface */
-		netmask = ((struct sockaddr_in *)(d->addresses->netmask))->sin_addr.S_un.S_addr;
+		netmask = ((struct sockaddr_in *)(d->addresses->netmask))->sin_addr.s_addr;
 	else
 		/* If the interface is without addresses we suppose to be in a C class network */
 		netmask = 0xffffff;
@@ -751,11 +730,10 @@ char *removeDuplicate(char str[], int n)
 	for (i = 1; str[i] == 0x20; i++);
 
 	// Traverse through all characters and put dots into whitespaces
-	for (i; i < n; i++){
+	for (; i < n; i++){
 		if (str[i] == 0x20)
 			str[i] = 0x2E; // .
 	}
-	char* p = str;
 	i = 0;
 	while (str[i] != '\0')
 	{
@@ -788,7 +766,7 @@ char* cutDataFromString(u_char *annotation, int* offset, bool lastItem)
 	int i = *offset;
 
 	// count till spaces are not there anymore
-	for (i; annotation[i] == 0x20; i++);
+	for (; annotation[i] == 0x20; i++);
 
 	// go from there till there are lots of spaces again
 	for (int j = 0; j < 32; j++, i++)
@@ -1216,7 +1194,7 @@ void getIMData(pn_ReadImplicit* pn_readimplicit, linked_list_t* currentDev){
 	{
 		currentDev->device->hardwareRevison = slot->moduledata.hardwareRevison; // the same
 		currentDev->device->version = slot->moduledata.version;
-		currentDev->device->orderId = slot->moduledata.orderID;
+		currentDev->device->orderId = (char*)slot->moduledata.orderID;
 	}
 
 	slot->moduledata.IMversion = malloc(8);
@@ -1254,6 +1232,7 @@ bool timeDiff(long msDiff){
 //  check every timeout if the time was set back if not, every packet should be here
 DWORD WINAPI loopTimerThread(LPVOID lpParameter)
 {
+	(void)lpParameter;
 	while (true)
 	{
 		if (timeDiff(TIMEOUT4))
@@ -1294,7 +1273,7 @@ int packetCapture(pcap_if_t* onedev){
 	}
 	if (onedev->addresses != NULL)
 		// Retrieve the mask of the first address of the interface
-		netmask = ((struct sockaddr_in *)(d->addresses->netmask))->sin_addr.S_un.S_addr;
+		netmask = ((struct sockaddr_in *)(d->addresses->netmask))->sin_addr.s_addr;
 	else
 		// If the interface is without addresses we suppose to be in a C class network
 		netmask = 0xffffff;

@@ -19,6 +19,8 @@
 unsigned short identnmb = 0;
 
 int main(int argc, char **argv) {
+	(void)argc;
+	(void)argv;
 
 	// check if on windows, if so then load the npcap library
 #ifdef WIN32
@@ -95,7 +97,6 @@ int main(int argc, char **argv) {
 		}
 
 		int l = 0;
-		int dCounter = threadData->devCount;
 
 		// we have all necessary information, start the scanning
 

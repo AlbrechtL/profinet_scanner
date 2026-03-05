@@ -1,9 +1,88 @@
-The scanner itself contains a own README where a description to the functionalities and future improvements are stated. It was programed in Visual Studio Express.
+# Profinet Scanner (Linux Port)
 
-This program was a test for what is possible to scan in a system with profinet devices. It was created during an internship.
+A port of the original Windows-only [Profinet scanner by Eiwanger](https://github.com/Eiwanger/profinet_scanner_prototype), now compatible with Linux using CMake and libpcap.
 
-It uses the NPCAP library to send packets over a ethernet connection to the devices and listens for their answers to parse them. I've made it as a console application that works only on windows because I used the windows libraries for multithreading. The used protocols are profinet DCP, ethernet, ip, udp and dce rpc.
+---
 
-If you want to use the program, look on https://nmap.org/npcap/ for the licence. Also go there if you don't understand how the sending and receiving works. They got a documentation for that. I used the Npcap SDK 1.01 (ZIP) from https://nmap.org/npcap/
+## Table of Contents
+- [Overview](#overview)
+- [Features](#features)
+- [Build (Linux)](#build-linux)
+- [Usage](#usage)
+- [Protocols](#protocols)
+- [TODO](#todo)
+- [Thanks](#thanks)
 
-I made a lot of comments to the program. For me it was a way to understand the different protocols and how they work. Maybe it also helps others.
+---
+
+## Overview
+This program scans for Profinet devices in a local subnet (Layer 2) or across a range of IP addresses (Layer 3). It sends Profinet DCP calls, listens for device responses, and performs additional RPC endpoint mapper requests for each discovered device. Results are written to a new XML file (existing files are overwritten).
+
+Originally created as a Visual Studio Express console application for Windows, this port enables Linux compatibility and uses libpcap for packet capture.
+
+The Linux port and code migration were performed by AI (GitHub Copilot), based on the original implementation and documentation.
+
+---
+
+## Features
+- Layer 2 scan: Profinet DCP call in local subnet
+- Layer 3 scan: IP range scan with detailed device info
+- Automatic RPC endpoint mapper requests for discovered devices
+- Results output to XML file
+- Extensive code comments for learning and reference
+
+---
+
+## Build (Linux)
+
+Install prerequisites:
+
+```sh
+sudo apt install libpcap-dev
+```
+
+Configure and build:
+
+```sh
+cmake -S . -B build        # configure the project and generate build files
+cmake --build build -j     # build all targets using parallel jobs
+```
+
+The resulting binary will be in `build/SendPacket/pn_scanner`.
+
+---
+
+## Usage
+
+Run the scanner from the build directory. Example:
+
+```sh
+./build/SendPacket/pn_scanner
+```
+
+Refer to code comments and source for usage details and options.
+
+---
+
+## Protocols
+- Profinet DCP (Layer 2)
+- Ethernet
+- IP
+- UDP
+- DCE/RPC (Layer 3)
+
+---
+
+## TODO
+- Add error enum
+- Change functions to return an error type instead of int or void
+- Refactor packet_handlerIP/packet_handlerIP_rem (difference: linked list data comparison)
+
+---
+
+## Thanks
+
+This port is based on the original Windows-only program by Eiwanger:
+https://github.com/Eiwanger/profinet_scanner_prototype
+
+Special thanks to Eiwanger for the original implementation and documentation.

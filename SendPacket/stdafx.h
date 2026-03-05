@@ -5,15 +5,25 @@
 
 #pragma once
 
-#include "targetver.h"
-
 #include <stdio.h>
-#include <tchar.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
 #include <stdbool.h>
 #include <time.h>
+
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+
+#ifdef _WIN32
+#include "targetver.h"
+#include <tchar.h>
+#endif
+
+#include "platform_compat.h"
 
 
 
@@ -31,16 +41,15 @@
 
 #include "remoteScan.h"
 
+#ifdef _WIN32
 #include <Iphlpapi.h>
 #include <Assert.h>
-#pragma comment(lib, "iphlpapi.lib")
-
-
 #include <WS2tcpip.h>
 #include <WinSock2.h>
-#pragma comment(lib, "Ws2_32.lib")
-
 #include <WinBase.h>
 #include <processthreadsapi.h>
+#pragma comment(lib, "iphlpapi.lib")
+#pragma comment(lib, "Ws2_32.lib")
+#endif
 
 

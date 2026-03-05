@@ -1150,7 +1150,7 @@ void packet_handler_IP_rem(u_char* param, const struct pcap_pkthdr *header, cons
 	strftime(timestr, sizeof timestr, "%H:%M:%S", &ltime);
 
 	//print timestamp and length of the packet
-	printf("%s.%.6d len:%d  %d.%d.%d.%d\n", timestr, header->ts.tv_usec, header->len, ih->saddr.byte1, ih->saddr.byte2, ih->saddr.byte3, ih->saddr.byte4);
+	printf("%s.%06ld len:%d  %d.%d.%d.%d\n", timestr, (long)header->ts.tv_usec, header->len, ih->saddr.byte1, ih->saddr.byte2, ih->saddr.byte3, ih->saddr.byte4);
 
 
 	// check first, if it is NULL malloc the first box
@@ -1262,7 +1262,7 @@ int captureIPPackets_rem(threadData_t* threadData){
 
 	if (d->addresses != NULL)
 		// Retrieve the mask of the first address of the interface
-		netmask = ((struct sockaddr_in *)(d->addresses->netmask))->sin_addr.S_un.S_addr;
+		netmask = ((struct sockaddr_in *)(d->addresses->netmask))->sin_addr.s_addr;
 	else
 		// If the interface is without addresses we suppose to be in a C class network
 		netmask = 0xffffff;

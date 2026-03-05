@@ -3,6 +3,14 @@
 #include "stdafx.h"
 #include "deviceHandler.h"
 #include <pcap.h>
+#ifndef _WIN32
+#include <arpa/inet.h>
+#include <ifaddrs.h>
+#include <net/if.h>
+#include <netinet/in.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
+#endif
 
 // function which lists all pcap compatible adapters
 // @param threadData -> stores the devicelist
@@ -170,10 +178,10 @@ void setOwnAddress(threadData_t* threadData)
 
 	getIP_SUB(d, threadData);
 
-	char ip[15];
+	char ip[16];
 	//char dot = '.';
 
-	sprintf_s(ip, sizeof(char) * 15, "%d.%d.%d.%d", threadData->ownIp.byte1, threadData->ownIp.byte2, threadData->ownIp.byte3, threadData->ownIp.byte4);
+	sprintf_s(ip, sizeof(ip), "%d.%d.%d.%d", threadData->ownIp.byte1, threadData->ownIp.byte2, threadData->ownIp.byte3, threadData->ownIp.byte4);
 
 	mac_address* m_address = getMAC(ip);
 	threadData->ownMac.byte1 = m_address->byte1;
@@ -225,9 +233,9 @@ void extractIP(ip_address* ip, u_long address)
 * @return the mac address of the interface with the given ip
 */
 mac_address* getMAC(const char *ip){
+#ifdef _WIN32
 	PIP_ADAPTER_INFO AdapterInfo;
 	DWORD dwBufLen = sizeof(AdapterInfo);
-	char *mac_addr = (char*)malloc(17);
 	mac_address* macad;
 	if ((macad = malloc(sizeof(mac_address))) == NULL){
 		printf("Error allocating memory needed to store mac address\n");
@@ -272,11 +280,80 @@ mac_address* getMAC(const char *ip){
 	}
 	free(AdapterInfo);
 	return NULL;
+#else
+	if (!ip) {
+		return NULL;
+	}
+
+	struct ifaddrs* ifaddr = NULL;
+	struct ifaddrs* ifa = NULL;
+	char ipString[INET_ADDRSTRLEN];
+	char selectedIfname[IFNAMSIZ];
+	selectedIfname[0] = '\0';
+
+	if (getifaddrs(&ifaddr) == -1) {
+		return NULL;
+	}
+
+	for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+		if (!ifa->ifa_addr || ifa->ifa_addr->sa_family != AF_INET) {
+			continue;
+		}
+
+		if (inet_ntop(AF_INET, &((struct sockaddr_in*)ifa->ifa_addr)->sin_addr, ipString, sizeof(ipString)) == NULL) {
+			continue;
+		}
+
+		if (strcmp(ipString, ip) == 0) {
+			strncpy(selectedIfname, ifa->ifa_name, sizeof(selectedIfname) - 1);
+			selectedIfname[sizeof(selectedIfname) - 1] = '\0';
+			break;
+		}
+	}
+
+	freeifaddrs(ifaddr);
+
+	if (selectedIfname[0] == '\0') {
+		return NULL;
+	}
+
+	int fd = socket(AF_INET, SOCK_DGRAM, 0);
+	if (fd < 0) {
+		return NULL;
+	}
+
+	struct ifreq ifr;
+	memset(&ifr, 0, sizeof(ifr));
+	strncpy(ifr.ifr_name, selectedIfname, IFNAMSIZ - 1);
+
+	if (ioctl(fd, SIOCGIFHWADDR, &ifr) < 0) {
+		close(fd);
+		return NULL;
+	}
+
+	close(fd);
+
+	mac_address* macad = (mac_address*)malloc(sizeof(mac_address));
+	if (!macad) {
+		return NULL;
+	}
+
+	unsigned char* mac = (unsigned char*)ifr.ifr_hwaddr.sa_data;
+	macad->byte1 = mac[0];
+	macad->byte2 = mac[1];
+	macad->byte3 = mac[2];
+	macad->byte4 = mac[3];
+	macad->byte5 = mac[4];
+	macad->byte6 = mac[5];
+
+	return macad;
+#endif
 }
 
 // fuction returns the default gateway (ip) of a lokal interface with help of the mac address
 ip_address* getAdapterDefaultGateway_IP(threadData_t* threadData)
 {
+#ifdef _WIN32
 	ULONG outBufLen = 15000;
 	ULONG flags = GAA_FLAG_INCLUDE_GATEWAYS | GAA_FLAG_INCLUDE_ALL_INTERFACES | GAA_FLAG_SKIP_DNS_SERVER | GAA_FLAG_SKIP_MULTICAST;
 	ULONG family = AF_INET;
@@ -348,12 +425,68 @@ ip_address* getAdapterDefaultGateway_IP(threadData_t* threadData)
 
 
 	return NULL;
+#else
+	(void)threadData;
+	FILE* routeFile = fopen("/proc/net/route", "r");
+	if (!routeFile) {
+		return NULL;
+	}
+
+	char line[256];
+	if (!fgets(line, sizeof(line), routeFile)) {
+		fclose(routeFile);
+		return NULL;
+	}
+
+	while (fgets(line, sizeof(line), routeFile)) {
+		char iface[IFNAMSIZ];
+		unsigned long destination = 0;
+		unsigned long gateway = 0;
+		unsigned int flags = 0;
+
+		if (sscanf(line, "%15s %lx %lx %x", iface, &destination, &gateway, &flags) != 4) {
+			continue;
+		}
+
+		if (destination == 0 && (flags & 0x2)) {
+			ip_address* defGateway = (ip_address*)malloc(sizeof(ip_address));
+			if (!defGateway) {
+				fclose(routeFile);
+				return NULL;
+			}
+
+			defGateway->byte1 = (u_char)(gateway & 0xFF);
+			defGateway->byte2 = (u_char)((gateway >> 8) & 0xFF);
+			defGateway->byte3 = (u_char)((gateway >> 16) & 0xFF);
+			defGateway->byte4 = (u_char)((gateway >> 24) & 0xFF);
+
+			fclose(routeFile);
+			return defGateway;
+		}
+	}
+
+	fclose(routeFile);
+	return NULL;
+#endif
 }
 
 #define BUFSIZE 256
 // send a ping to the given ip and read the arp table with the cmd to get the MAC address of the default gateway 
 void getAdapterDefaultGateway_MAC(threadData_t* threadData, ip_address* defaultGateway)
 {
+	if (!defaultGateway) {
+		return;
+	}
+
+	if (!threadData->defaultGatewayMAC) {
+		threadData->defaultGatewayMAC = malloc(sizeof(mac_address));
+		if (!threadData->defaultGatewayMAC) {
+			printf("Error allocating memory for defaultGatewayMac address");
+			return;
+		}
+	}
+
+#ifdef _WIN32
 	// ping the default gateway
 	// use arp -a ipaddress to get the mac address of router
 
@@ -400,12 +533,6 @@ void getAdapterDefaultGateway_MAC(threadData_t* threadData, ip_address* defaultG
 
 	stripEnter(mac, "-");
 
-	if ((threadData->defaultGatewayMAC = malloc(sizeof(mac_address))) == NULL)
-	{
-		printf("Error allocating memory for defaultGatewayMac address");
-		return;
-	}
-
 	char buff[5]= { '0', 'x', ' ', ' ', '\0'};
 	u_char mac_u[6];
 	for (int i = 0, j = 0; i < 6; i++, j=j+2)
@@ -431,6 +558,54 @@ void getAdapterDefaultGateway_MAC(threadData_t* threadData, ip_address* defaultG
 	threadData->defaultGatewayMAC->byte4 = mac_u[3];
 	threadData->defaultGatewayMAC->byte5 = mac_u[4];
 	threadData->defaultGatewayMAC->byte6 = mac_u[5];
+
+#else
+	char ipaddr[16];
+	snprintf(ipaddr, sizeof(ipaddr), "%d.%d.%d.%d", defaultGateway->byte1, defaultGateway->byte2, defaultGateway->byte3, defaultGateway->byte4);
+
+	char pingcmd[96];
+	snprintf(pingcmd, sizeof(pingcmd), "ping -c 1 -W 1 %s > /dev/null 2>&1", ipaddr);
+	(void)system(pingcmd);
+
+	FILE* arpFile = fopen("/proc/net/arp", "r");
+	if (!arpFile) {
+		return;
+	}
+
+	char line[256];
+	if (!fgets(line, sizeof(line), arpFile)) {
+		fclose(arpFile);
+		return;
+	}
+
+	while (fgets(line, sizeof(line), arpFile)) {
+		char foundIp[64];
+		char hwType[16];
+		char flags[16];
+		char mac[32];
+		char mask[32];
+		char device[IFNAMSIZ];
+
+		if (sscanf(line, "%63s %15s %15s %31s %31s %15s", foundIp, hwType, flags, mac, mask, device) != 6) {
+			continue;
+		}
+
+		if (strcmp(foundIp, ipaddr) == 0) {
+			unsigned int b1, b2, b3, b4, b5, b6;
+			if (sscanf(mac, "%x:%x:%x:%x:%x:%x", &b1, &b2, &b3, &b4, &b5, &b6) == 6) {
+				threadData->defaultGatewayMAC->byte1 = (u_char)b1;
+				threadData->defaultGatewayMAC->byte2 = (u_char)b2;
+				threadData->defaultGatewayMAC->byte3 = (u_char)b3;
+				threadData->defaultGatewayMAC->byte4 = (u_char)b4;
+				threadData->defaultGatewayMAC->byte5 = (u_char)b5;
+				threadData->defaultGatewayMAC->byte6 = (u_char)b6;
+				break;
+			}
+		}
+	}
+
+	fclose(arpFile);
+#endif
 
 
 }

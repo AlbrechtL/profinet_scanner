@@ -1,6 +1,8 @@
 #include "stdafx.h"
 #include "filehandler.h"
 
+fpos_t endpos;
+
 // writes a give device to a file
 // @param deviceInfo -> device with all information
 // @param cFilename -> string with path and filename
@@ -88,9 +90,6 @@ int writeToFile(datasheet* deviceInfo, char* cFilename, mac_address* defGatewayM
 	char moduelIdentnumber_s[] = "<moduleIdentificationNumber>";
 	char moduelIdentnumber_e[] = "</moduleIdentificationNumber>\n";
 
-	char numofsubmodule_s[] = "<numberOfSubmodules>";
-	char numofsubmodule_e[] = "</numberOfSubmodules>\n";
-
 	char subslotNumber_s[] = "<subslotNumber>";
 	char subslotNumber_e[] = "</subslotNumber>\n";
 
@@ -171,7 +170,7 @@ int writeToFile(datasheet* deviceInfo, char* cFilename, mac_address* defGatewayM
 		}
 		// delete the last line or start writing in the line before
 		// get the size of the last tag away from the end of file
-		int setposworked = fsetpos(fp, &endpos);
+		(void)fsetpos(fp, &endpos);
 
 	}
 
@@ -719,7 +718,7 @@ char* decodeVendorID(u_short vID)
 	case 38: return "Rosemount Inc.";
 	case 42: return "SIEMENS AG";
 	case 87: return "wenglor sensoric GmbH";
-	case 120: return "Bürkert Werke GmbH";
+	case 120: return "Bï¿½rkert Werke GmbH";
 	case 127: return "LABOM Mess- und Regeltechnik GmbH";
 	case 131: return "SMC Corp.";
 	case 176: return "Phoenix Contact GmbH &amp; Co. KG";
@@ -736,7 +735,7 @@ char* decodeVendorID(u_short vID)
 	case 295: return "Molex Incorporated";
 	case 297: return "Schneider Electric";
 	case 303: return "Murrelektronik GmbH";
-	case 308: return "Weidmüller Interface GmbH &amp; Co. KG";
+	case 308: return "Weidmï¿½ller Interface GmbH &amp; Co. KG";
 	case 309: return "EUCHNER GmbH + Co. KG";
 	case 310: return "ifm electronic gmbh";
 	case 317: return "Hans Turck GmbH &amp; Co.KG";
@@ -804,7 +803,7 @@ char* decodeVendorID(u_short vID)
 	case 789: return "XECRO GmbH";
 	case 791: return "Germbedded GmbH";
 	case 793: return "Bernstein AG";
-	case 795: return "Bühler Technologies GmbH";
+	case 795: return "Bï¿½hler Technologies GmbH";
 	case 796: return "PIAB AB";
 	case 806: return "RAFI Systec GmbH + Co. KG";
 	case 807: return "AMADA ENGINEERING CO., LTD.";
@@ -841,15 +840,15 @@ char* decodeVendorID(u_short vID)
 	case 926: return "K.MECS Co., LTD";
 	case 929: return "Takenaka Electronic Industrial Co. Ltd.";
 	case 930: return "SICK OPTEX CO., LTD.";
-	case 931: return "Bräuer Systemtechnik GmbH";
+	case 931: return "Brï¿½uer Systemtechnik GmbH";
 	case 942: return "Norgren GmbH";
 	case 947: return "DUOmetric AG";
-	case 949: return "Römheld GmbH Friedrichshütte";
+	case 949: return "Rï¿½mheld GmbH Friedrichshï¿½tte";
 	case 950: return "M&amp;M Software GmbH";
 	case 960: return "Layher AG";
-	case 961: return "Fraunhofer-Institut für Mikroelektronische Schaltungen und Systeme IMS";
+	case 961: return "Fraunhofer-Institut fï¿½r Mikroelektronische Schaltungen und Systeme IMS";
 	case 970: return "Advantech Europe BV";
-	case 973: return "IVG Göhringer";
+	case 973: return "IVG Gï¿½hringer";
 	case 974: return "MYOTOKU Ltd.";
 	case 979: return "Aichi Tokei Denki co.,Ltd";
 	case 980: return "motrona GmbH";
@@ -907,10 +906,10 @@ char* decodeVendorID(u_short vID)
 	case 1166: return "Panasonic Electric Works Europe AG";
 	case 1167: return "LINAK A/S";
 	case 1171: return "rt-labs AB";
-	case 1174: return "WEG INDÚSTRIAS S/A - AUTOMAÇÃO";
+	case 1174: return "WEG INDï¿½STRIAS S/A - AUTOMAï¿½ï¿½O";
 	case 1180: return "Seli GmbH Automatisierungstechnik";
 	case 1181: return "Elco (Tianjin) Electronics Co., Ltd.";
-	case 1182: return "Müller Industrie-Elektronik GmbH";
+	case 1182: return "Mï¿½ller Industrie-Elektronik GmbH";
 	case 1184: return "KunShan SVLEC Electrical Co. LTD";
 	case 1189: return "WIKA Alexander Wiegand SE &amp; Co. KG";
 	case 1191: return "STEM S.r.L.";
@@ -920,7 +919,7 @@ char* decodeVendorID(u_short vID)
 	case 1206: return "ACS Control System GmbH";
 	case 1211: return "ISAC SRL";
 	case 1213: return "Metrol Co., Ltd.";
-	case 1214: return "Meister Strömungstechnik GmbH";
+	case 1214: return "Meister Strï¿½mungstechnik GmbH";
 	case 1215: return "Heidelberger Druckmaschinen AG";
 	case 1218: return "Diana Electronic-Systeme GmbH";
 	case 1672: return "Intellisense (Xiamen) Microelectronics Ltd";

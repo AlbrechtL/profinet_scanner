@@ -7,7 +7,7 @@ extern int writeToFile(datasheet* deviceInfo, char* cFilename, mac_address* defa
 extern bool FileExists(const char *fname);
 
 // postition of the curser bevor the last tag
-fpos_t endpos;
+extern fpos_t endpos;
 
 enum portState{
 	Up = 0x0001,
