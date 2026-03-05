@@ -24,11 +24,9 @@ typedef struct cli_options {
 	bool hasInterface;
 	bool hasMode;
 	bool hasTarget;
-	bool hasOutput;
 	int mode;
 	char interfaceValue[256];
 	char targetValue[32];
-	char outputValue[MAX_FILENAME_LENGTH];
 } cli_options_t;
 
 static void printHelp(const char* programName)
@@ -36,7 +34,7 @@ static void printHelp(const char* programName)
 	printf("Usage:\n");
 	printf("  %s --help\n", programName);
 	printf("  %s --list-interfaces\n", programName);
-	printf("  %s --interface <index|name> --mode <local|remote> [--target <a.b.c.d[-e]>] [--output <file.xml>]\n", programName);
+	printf("  %s --interface <index|name> --mode <local|remote> [--target <a.b.c.d[-e]>]\n", programName);
 	printf("  %s --interactive\n\n", programName);
 
 	printf("Options:\n");
@@ -46,13 +44,11 @@ static void printHelp(const char* programName)
 	printf("  --mode VALUE         Scan mode: local (DCP) or remote (DCE/RPC).\n");
 	printf("  --target VALUE       Remote target IP or range in the form a.b.c.d or a.b.c.d-e.\n");
 	printf("                       Required when --mode remote is used.\n");
-	printf("  --output PATH        Output XML file path. Optional. If omitted, print summary to stdout.\n");
 	printf("  --interactive        Run prompt-based mode (default when no arguments are given).\n\n");
 
 	printf("Examples:\n");
 	printf("  %s --list-interfaces\n", programName);
-	printf("  %s --interface 1 --mode local --output scan.xml\n", programName);
-	printf("  %s --interface eth0 --mode remote --target 192.168.0.10-20 --output remote_scan.xml\n", programName);
+	printf("  %s --interface 1 --mode local\n", programName);
 	printf("  %s --interface eth0 --mode remote --target 192.168.0.10-20\n", programName);
 }
 
@@ -198,15 +194,6 @@ int main(int argc, char **argv) {
 			}
 			strcpy_s(options.targetValue, sizeof(options.targetValue), argv[++argumentIndex]);
 			options.hasTarget = true;
-			continue;
-		}
-		if (strcmp(argv[argumentIndex], "--output") == 0) {
-			if (argumentIndex + 1 >= argc) {
-				printf("Missing value for --output\n");
-				return -1;
-			}
-			strcpy_s(options.outputValue, sizeof(options.outputValue), argv[++argumentIndex]);
-			options.hasOutput = true;
 			continue;
 		}
 
@@ -608,26 +595,7 @@ int main(int argc, char **argv) {
 
 
 
-	// write the list of devices to a xml file
-	linked_list_t* tmp = threadData->first;
-	char buff[MAX_FILENAME_LENGTH];
-	buff[0] = '\0';
-	if (options.hasOutput) {
-		strcpy_s(buff, sizeof(buff), options.outputValue);
-	}
-
-	if (buff[0] != '\0') {
-		printf_s("\n\nWrite to file started\n\n");
-		while (tmp != NULL)
-		{
-			writeToFile(tmp->device, buff, threadData->defaultGatewayMAC);
-			tmp = tmp->next;
-		}
-		printf_s("Write to file finished\n\n");
-	}
-	else {
-		printResultsToStdout(threadData->first);
-	}
+	printResultsToStdout(threadData->first);
 	if (options.interactive) {
 		system("pause");
 	}

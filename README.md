@@ -17,7 +17,7 @@ A port of the original Windows-only [Profinet scanner by Eiwanger](https://githu
 ---
 
 ## Overview
-This program scans for Profinet devices in a local subnet (Layer 2) or across a range of IP addresses (Layer 3). It sends Profinet DCP calls, listens for device responses, and performs additional RPC endpoint mapper requests for each discovered device. Results are written to XML if `--output` is provided; otherwise a human-readable summary is printed to stdout.
+This program scans for Profinet devices in a local subnet (Layer 2) or across a range of IP addresses (Layer 3). It sends Profinet DCP calls, listens for device responses, and performs additional RPC endpoint mapper requests for each discovered device. Results are printed as a human-readable summary to stdout.
 
 Originally created as a Visual Studio Express console application for Windows, this port enables Linux compatibility and uses libpcap for packet capture.
 
@@ -29,7 +29,7 @@ The Linux port and code migration were performed by AI (GitHub Copilot), based o
 - Layer 2 scan: Profinet DCP call in local subnet
 - Layer 3 scan: IP range scan with detailed device info
 - Automatic RPC endpoint mapper requests for discovered devices
-- Results output to XML file
+- Human-readable scan summary output to stdout
 - Extensive code comments for learning and reference
 
 ---
@@ -97,10 +97,6 @@ The program supports interactive mode (default) and non-interactive CLI mode.
 	Remote target IP or range. Required when --mode remote is used.
 	Examples: 192.168.0.10, 192.168.0.10-20
 
---output <file.xml>
-  Output XML file path. Optional.
-  If omitted, a human-readable scan summary is printed to stdout.
-
 --interactive
 	Force prompt-based mode (also the default when no parameters are provided).
 ```
@@ -109,15 +105,9 @@ Examples:
 
 ```sh
 # Local scan (non-interactive)
-./build/SendPacket/pn_scanner --interface 1 --mode local --output local_scan.xml
-
-# Local scan to stdout (non-interactive)
 ./build/SendPacket/pn_scanner --interface 1 --mode local
 
 # Remote scan (non-interactive)
-./build/SendPacket/pn_scanner --interface eth0 --mode remote --target 192.168.0.10-20 --output remote_scan.xml
-
-# Remote scan to stdout (non-interactive)
 ./build/SendPacket/pn_scanner --interface eth0 --mode remote --target 192.168.0.10-20
 
 # Real world example
