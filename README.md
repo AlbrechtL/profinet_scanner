@@ -134,7 +134,7 @@ listening on enp0s31f6 for pn_dcp...
 
 ---
 
-## TODO
+## TODO (from original [Profinet scanner by Eiwanger (https://github.com/Eiwanger/profinet_scanner_prototype))
 - Add error enum
 - Change functions to return an error type instead of int or void
 - Refactor packet_handlerIP/packet_handlerIP_rem (difference: linked list data comparison)
