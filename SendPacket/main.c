@@ -36,7 +36,7 @@ static void printHelp(const char* programName)
 	printf("Usage:\n");
 	printf("  %s --help\n", programName);
 	printf("  %s --list-interfaces\n", programName);
-	printf("  %s --interface <index|name> --mode <local|remote> [--target <a.b.c.d[-e]>] --output <file.xml>\n", programName);
+	printf("  %s --interface <index|name> --mode <local|remote> [--target <a.b.c.d[-e]>] [--output <file.xml>]\n", programName);
 	printf("  %s --interactive\n\n", programName);
 
 	printf("Options:\n");
@@ -46,13 +46,59 @@ static void printHelp(const char* programName)
 	printf("  --mode VALUE         Scan mode: local or remote.\n");
 	printf("  --target VALUE       Remote target IP or range in the form a.b.c.d or a.b.c.d-e.\n");
 	printf("                       Required when --mode remote is used.\n");
-	printf("  --output PATH        Output XML file path. Required in non-interactive mode.\n");
+	printf("  --output PATH        Output XML file path. Optional. If omitted, print summary to stdout.\n");
 	printf("  --interactive        Run prompt-based mode (default when no arguments are given).\n\n");
 
 	printf("Examples:\n");
 	printf("  %s --list-interfaces\n", programName);
 	printf("  %s --interface 1 --mode local --output scan.xml\n", programName);
 	printf("  %s --interface eth0 --mode remote --target 192.168.0.10-20 --output remote_scan.xml\n", programName);
+	printf("  %s --interface eth0 --mode remote --target 192.168.0.10-20\n", programName);
+}
+
+static void printDeviceSummary(const datasheet* device)
+{
+	if (!device) {
+		return;
+	}
+
+	printf("Device\n");
+	printf("  IP: %d.%d.%d.%d\n",
+		device->deviceIp.byte1,
+		device->deviceIp.byte2,
+		device->deviceIp.byte3,
+		device->deviceIp.byte4);
+	printf("  MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
+		device->deviceMACaddress.byte1 & 0xFF,
+		device->deviceMACaddress.byte2 & 0xFF,
+		device->deviceMACaddress.byte3 & 0xFF,
+		device->deviceMACaddress.byte4 & 0xFF,
+		device->deviceMACaddress.byte5 & 0xFF,
+		device->deviceMACaddress.byte6 & 0xFF);
+	printf("  Name: %s\n", device->nameOfStation ? device->nameOfStation : "");
+	printf("  Type: %s\n", device->deviceType ? device->deviceType : "");
+	printf("  Order ID: %s\n", device->orderId ? device->orderId : "");
+	printf("  SW Version: %s\n", device->version ? device->version : "");
+	printf("  HW Revision: %s\n", device->hardwareRevison ? device->hardwareRevison : "");
+	printf("  Vendor ID: 0x%04x\n", device->vendorId);
+	printf("  Device ID: 0x%04x\n", device->deviceId);
+	if (device->udpPort != 0) {
+		printf("  UDP Port: %u\n", device->udpPort);
+	}
+	printf("\n");
+}
+
+static void printResultsToStdout(linked_list_t* list)
+{
+	if (!list) {
+		printf("No devices found.\n");
+		return;
+	}
+
+	printf("\nScan results (stdout):\n\n");
+	for (linked_list_t* current = list; current != NULL; current = current->next) {
+		printDeviceSummary(current->device);
+	}
 }
 
 static void printInterfaces(threadData_t* threadData)
@@ -176,10 +222,6 @@ int main(int argc, char **argv) {
 		}
 		if (!options.hasMode) {
 			printf("Missing required option --mode in non-interactive mode\n");
-			return -1;
-		}
-		if (!options.hasOutput) {
-			printf("Missing required option --output in non-interactive mode\n");
 			return -1;
 		}
 		if (options.mode == 1 && !options.hasTarget) {
@@ -567,37 +609,25 @@ int main(int argc, char **argv) {
 
 
 	// write the list of devices to a xml file
-	printf_s("\n\nWrite to file started\n\n");
 	linked_list_t* tmp = threadData->first;
 	char buff[MAX_FILENAME_LENGTH];
 	buff[0] = '\0';
 	if (options.hasOutput) {
 		strcpy_s(buff, sizeof(buff), options.outputValue);
-	} else if (options.interactive) {
-		printf("Please insert path/filename max %d characters, ending .xml\n", MAX_FILENAME_LENGTH);
-		fgets(buff, sizeof(buff), stdin);
-		stripEnter(buff, "\n");
-	} else {
-		printf("Missing required option --output in non-interactive mode\n");
-		empty_list(threadData->first);
-		free(threadData);
-		return -1;
 	}
 
-	if (buff[0] == '\0') {
-		printf("Output path must not be empty\n");
-		empty_list(threadData->first);
-		free(threadData);
-		return -1;
+	if (buff[0] != '\0') {
+		printf_s("\n\nWrite to file started\n\n");
+		while (tmp != NULL)
+		{
+			writeToFile(tmp->device, buff, threadData->defaultGatewayMAC);
+			tmp = tmp->next;
+		}
+		printf_s("Write to file finished\n\n");
 	}
-
-
-	while (tmp != NULL)
-	{
-		writeToFile(tmp->device, buff, threadData->defaultGatewayMAC);
-		tmp = tmp->next;
+	else {
+		printResultsToStdout(threadData->first);
 	}
-	printf_s("Write to file finished\n\n");
 	if (options.interactive) {
 		system("pause");
 	}

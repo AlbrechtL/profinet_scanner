@@ -17,7 +17,7 @@ A port of the original Windows-only [Profinet scanner by Eiwanger](https://githu
 ---
 
 ## Overview
-This program scans for Profinet devices in a local subnet (Layer 2) or across a range of IP addresses (Layer 3). It sends Profinet DCP calls, listens for device responses, and performs additional RPC endpoint mapper requests for each discovered device. Results are written to a new XML file (existing files are overwritten).
+This program scans for Profinet devices in a local subnet (Layer 2) or across a range of IP addresses (Layer 3). It sends Profinet DCP calls, listens for device responses, and performs additional RPC endpoint mapper requests for each discovered device. Results are written to XML if `--output` is provided; otherwise a human-readable summary is printed to stdout.
 
 Originally created as a Visual Studio Express console application for Windows, this port enables Linux compatibility and uses libpcap for packet capture.
 
@@ -98,7 +98,8 @@ The program supports interactive mode (default) and non-interactive CLI mode.
 	Examples: 192.168.0.10, 192.168.0.10-20
 
 --output <file.xml>
-	Output XML file path. Required in non-interactive mode.
+  Output XML file path. Optional.
+  If omitted, a human-readable scan summary is printed to stdout.
 
 --interactive
 	Force prompt-based mode (also the default when no parameters are provided).
@@ -110,8 +111,14 @@ Examples:
 # Local scan (non-interactive)
 ./build/SendPacket/pn_scanner --interface 1 --mode local --output local_scan.xml
 
+# Local scan to stdout (non-interactive)
+./build/SendPacket/pn_scanner --interface 1 --mode local
+
 # Remote scan (non-interactive)
 ./build/SendPacket/pn_scanner --interface eth0 --mode remote --target 192.168.0.10-20 --output remote_scan.xml
+
+# Remote scan to stdout (non-interactive)
+./build/SendPacket/pn_scanner --interface eth0 --mode remote --target 192.168.0.10-20
 ```
 
 ---
