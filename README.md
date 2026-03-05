@@ -119,6 +119,18 @@ Examples:
 
 # Remote scan to stdout (non-interactive)
 ./build/SendPacket/pn_scanner --interface eth0 --mode remote --target 192.168.0.10-20
+
+# Real world example
+sudo ./build/SendPacket/pn_scanner --interface enp0s31f6 --mode local
+Send pn_dcp 
+
+listening on enp0s31f6 for pn_dcp...
+23:29:49.003030 len:144  00:07:05:32:7e:aa
+  DCP IP: 0.0.0.0
+  DCP NameOfStation: testxasensorf28b
+  DCP DeviceVendorValue: iTEMP TMT86
+  DCP VendorID: 0x0011
+  DCP DeviceID: 0xa3ff
 ```
 
 ---
