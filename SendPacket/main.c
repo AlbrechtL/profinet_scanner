@@ -43,7 +43,7 @@ static void printHelp(const char* programName)
 	printf("  --help               Show this help message and exit.\n");
 	printf("  --list-interfaces    List available capture interfaces and exit.\n");
 	printf("  --interface VALUE    Interface index (1-based) or interface name from --list-interfaces.\n");
-	printf("  --mode VALUE         Scan mode: local or remote.\n");
+	printf("  --mode VALUE         Scan mode: local (DCP) or remote (DCE/RPC).\n");
 	printf("  --target VALUE       Remote target IP or range in the form a.b.c.d or a.b.c.d-e.\n");
 	printf("                       Required when --mode remote is used.\n");
 	printf("  --output PATH        Output XML file path. Optional. If omitted, print summary to stdout.\n");

@@ -91,7 +91,7 @@ The program supports interactive mode (default) and non-interactive CLI mode.
 	Select interface by 1-based index (from --list-interfaces) or interface name.
 
 --mode <local|remote>
-	Select scan mode.
+    Select scan mode: local uses PROFINET DCP (Layer 2) and remote uses DCE/RPC (Layer 3).
 
 --target <a.b.c.d[-e]>
 	Remote target IP or range. Required when --mode remote is used.
