@@ -11,7 +11,6 @@ A port of the original Windows-only [Profinet scanner by Eiwanger](https://githu
 - [Usage](#usage)
 - [CLI Options](#cli-options)
 - [Protocols](#protocols)
-- [TODO](#todo)
 - [Thanks](#thanks)
 
 ---
@@ -132,12 +131,6 @@ listening on enp0s31f6 for pn_dcp...
 - UDP
 - DCE/RPC (Layer 3)
 
----
-
-## TODO (from original [Profinet scanner by Eiwanger (https://github.com/Eiwanger/profinet_scanner_prototype))
-- Add error enum
-- Change functions to return an error type instead of int or void
-- Refactor packet_handlerIP/packet_handlerIP_rem (difference: linked list data comparison)
 
 ---
 
