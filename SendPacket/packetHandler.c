@@ -90,8 +90,16 @@ int sendPacket_DCP(threadData_t* threadData)
 		packet_dcp[i] = (u_char)0;
 	}
 
+	if (!threadData || !threadData->alldevs) {
+		return -1;
+	}
+
 	// Jump to the selected adapter 
-	for (d = threadData->alldevs, i = 0; i < netAdapterNmb - 1; d = d->next, i++);
+	for (d = threadData->alldevs, i = 0; i < netAdapterNmb - 1 && d != NULL; d = d->next, i++);
+	if (!d || !d->name) {
+		fprintf(stderr, "\nNo valid adapter selected for sendPacket_DCP.\n");
+		return -1;
+	}
 
 	//getIP_SUB(d, threadData);
 
@@ -104,7 +112,7 @@ int sendPacket_DCP(threadData_t* threadData)
 		)) == NULL) {
 		fprintf(stderr,
 			"\nUnable to open the adapter. %s is not supported by Npcap\n",
-			(char*)d);
+			d->name);
 		return 2;
 	}
 
@@ -145,7 +153,11 @@ int sendPacket_RPC(threadData_t* threadData)
 	}
 
 	// Jump to the selected adapter 
-	for (d = threadData->alldevs, i = 0; i < netAdapterNmb - 1; d = d->next, i++);
+	for (d = threadData->alldevs, i = 0; i < netAdapterNmb - 1 && d != NULL; d = d->next, i++);
+	if (!d || !d->name) {
+		fprintf(stderr, "\nNo valid adapter selected for sendPacket_RPC.\n");
+		return -1;
+	}
 
 
 	// Plan 2 

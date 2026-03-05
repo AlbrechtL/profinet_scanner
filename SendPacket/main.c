@@ -169,6 +169,25 @@ int main(int argc, char **argv) {
 		return -1;
 	}
 
+	if (!options.interactive && !options.listInterfaces) {
+		if (!options.hasInterface) {
+			printf("Missing required option --interface in non-interactive mode\n");
+			return -1;
+		}
+		if (!options.hasMode) {
+			printf("Missing required option --mode in non-interactive mode\n");
+			return -1;
+		}
+		if (!options.hasOutput) {
+			printf("Missing required option --output in non-interactive mode\n");
+			return -1;
+		}
+		if (options.mode == 1 && !options.hasTarget) {
+			printf("Missing required option --target for remote mode\n");
+			return -1;
+		}
+	}
+
 	// check if on windows, if so then load the npcap library
 #ifdef WIN32
 	/* Load Npcap and its functions. */
@@ -238,7 +257,11 @@ int main(int argc, char **argv) {
 
 
 	// get mac addres of def gateway
-	getAdapterDefaultGateway_MAC(threadData, getAdapterDefaultGateway_IP(threadData));
+	ip_address* defaultGatewayIP = getAdapterDefaultGateway_IP(threadData);
+	getAdapterDefaultGateway_MAC(threadData, defaultGatewayIP);
+	if (defaultGatewayIP) {
+		free(defaultGatewayIP);
+	}
 
 
 
@@ -291,6 +314,16 @@ int main(int argc, char **argv) {
 				system("pause");
 			}
 			return -1; // false IP
+		}
+
+		if (!threadData->defaultGatewayMAC) {
+			printf("Default gateway MAC could not be resolved for remote scan.\n");
+			pcap_freealldevs(threadData->alldevs);
+			free(threadData);
+			if (options.interactive) {
+				system("pause");
+			}
+			return -1;
 		}
 
 		int l = 0;
@@ -431,8 +464,9 @@ int main(int argc, char **argv) {
 		int deviceCount = linkedlist_status(threadData->first);
 		if (deviceCount == -1)
 		{
+			WaitForSingleObject(sniffThread, INFINITE);
 			printf_s("List empty; no profinet devices in the subnet!");
-			free(threadData->alldevs);
+			pcap_freealldevs(threadData->alldevs);
 			free(threadData);
 			return -1;
 		}

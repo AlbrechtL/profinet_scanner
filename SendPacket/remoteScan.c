@@ -7,6 +7,11 @@
 // @param firstCall -> states if the rpc call is the first or the second one. The second one needs the handle 
 int sendPacket_RPC_rem(threadData_t* threadData, bool firstCall)
 {
+	if (!threadData || !threadData->alldevs || !threadData->defaultGatewayMAC) {
+		fprintf(stderr, "\nMissing data for remote RPC send.\n");
+		return -1;
+	}
+
 	pcap_t *fp;
 	u_char packet_ip[IP_UDP_RPC_PACKETSIZE];
 
@@ -17,7 +22,11 @@ int sendPacket_RPC_rem(threadData_t* threadData, bool firstCall)
 
 	// Jump to the selected adapter
 	//inum = 7;
-	for (d = threadData->alldevs, i = 0; i < netAdapterNmb - 1; d = d->next, i++);
+	for (d = threadData->alldevs, i = 0; i < netAdapterNmb - 1 && d != NULL; d = d->next, i++);
+	if (!d || !d->name) {
+		fprintf(stderr, "\nNo valid adapter selected for remote RPC send.\n");
+		return -1;
+	}
 
 
 	// Plan 2
@@ -44,7 +53,12 @@ int sendPacket_RPC_rem(threadData_t* threadData, bool firstCall)
 	linked_list_t* currentDevice = threadData->first;
 
 	if (!firstCall)
-		for (int i = 0; i < threadData->numberOfIPDev; i++, currentDevice = currentDevice->next);
+		for (int i = 0; i < threadData->numberOfIPDev && currentDevice != NULL; i++, currentDevice = currentDevice->next);
+
+	if (!firstCall && (!currentDevice || !currentDevice->device)) {
+		fprintf(stderr, "\nMissing device data for remote RPC follow-up call.\n");
+		return -1;
+	}
 
 	// address of router
 
@@ -117,6 +131,10 @@ int sendPacket_RPC_rem(threadData_t* threadData, bool firstCall)
 
 	}
 	else{
+		if (!threadData->targetIP || threadData->numberOfIPDev < 0) {
+			fprintf(stderr, "\nMissing target IP data for remote RPC send.\n");
+			return -1;
+		}
 		packet_ip[30] = threadData->targetIP[threadData->numberOfIPDev].byte1;
 		packet_ip[31] = threadData->targetIP[threadData->numberOfIPDev].byte2;
 		packet_ip[32] = threadData->targetIP[threadData->numberOfIPDev].byte3;
@@ -433,6 +451,10 @@ int sendPacket_RPC_rem(threadData_t* threadData, bool firstCall)
 	packet_ip[197] = 0x00;
 
 	udp_pHeader.udp_data = malloc(sizeof(char)*UDP_PACKETSIZE);
+	if (!udp_pHeader.udp_data) {
+		fprintf(stderr, "\nFailed to allocate UDP data for remote RPC send.\n");
+		return -1;
+	}
 	for (int i = 42; i < IP_UDP_RPC_PACKETSIZE; i++)
 	{
 		udp_pHeader.udp_data[i - 42] = packet_ip[i];
@@ -450,9 +472,10 @@ int sendPacket_RPC_rem(threadData_t* threadData, bool firstCall)
 		1000,			// read timeout
 		errbuf			// error buffer
 		)) == NULL) {
+		free(udp_pHeader.udp_data);
 		fprintf(stderr,
 			"\nUnable to open the adapter. %s is not supported by Npcap\n",
-			(char*)d);
+			d->name);
 		return 2;
 	}
 
@@ -461,9 +484,13 @@ int sendPacket_RPC_rem(threadData_t* threadData, bool firstCall)
 		packet_ip,				// buffer with the packet
 		IP_UDP_RPC_PACKETSIZE					// size
 		) != 0) {
+		free(udp_pHeader.udp_data);
+		pcap_close(fp);
 		fprintf(stderr, "\nError sending the packet: %s\n", pcap_geterr(fp));
 		return 3;
 	}
+
+	free(udp_pHeader.udp_data);
 
 
 
@@ -493,6 +520,11 @@ int sendPacket_RPC_rem(threadData_t* threadData, bool firstCall)
 // @param layer -> states if the function is called on layer 2 or layer 3
 int sendpacket_IM_rem(threadData_t* threadData, u_short parameterIndex, slotParameter* slotparameter, int layer)
 {
+	if (!threadData || !threadData->alldevs) {
+		fprintf(stderr, "\nMissing data for remote IM send.\n");
+		return -1;
+	}
+
 	pcap_t *fp;
 	char errbuf[PCAP_ERRBUF_SIZE];
 
@@ -508,7 +540,11 @@ int sendpacket_IM_rem(threadData_t* threadData, u_short parameterIndex, slotPara
 	// implement the ethernet ip udp rpc header
 
 
-	for (d = threadData->alldevs, i = 0; i < netAdapterNmb - 1; d = d->next, i++);
+	for (d = threadData->alldevs, i = 0; i < netAdapterNmb - 1 && d != NULL; d = d->next, i++);
+	if (!d || !d->name) {
+		fprintf(stderr, "\nNo valid adapter selected for remote IM send.\n");
+		return -1;
+	}
 
 
 
@@ -535,10 +571,19 @@ int sendpacket_IM_rem(threadData_t* threadData, u_short parameterIndex, slotPara
 	// jump to device destination in linked List
 	linked_list_t* currentDevice = threadData->first;
 
-	for (int i = 0; i < threadData->numberOfIPDev; i++, currentDevice = currentDevice->next);
+	for (int i = 0; i < threadData->numberOfIPDev && currentDevice != NULL; i++, currentDevice = currentDevice->next);
+
+	if (!currentDevice || !currentDevice->device) {
+		fprintf(stderr, "\nMissing device data for remote IM send.\n");
+		return -1;
+	}
 
 	// remote, so it is the address of the default gateway
 	if (layer == 3){
+		if (!threadData->defaultGatewayMAC) {
+			fprintf(stderr, "\nDefault gateway MAC unavailable for remote IM send.\n");
+			return -1;
+		}
 		packet_IM[0] = threadData->defaultGatewayMAC->byte1;
 		packet_IM[1] = threadData->defaultGatewayMAC->byte2;
 		packet_IM[2] = threadData->defaultGatewayMAC->byte3;
@@ -1225,6 +1270,11 @@ void packet_handler_IP_rem(u_char* param, const struct pcap_pkthdr *header, cons
 // function which captures packets 
 // @param threadData -> pointer to a threadData struct, which contains necessary information for the function
 int captureIPPackets_rem(threadData_t* threadData){
+	if (!threadData || !threadData->alldevs) {
+		fprintf(stderr, "\nMissing adapter data for remote capture.\n");
+		return -1;
+	}
+
 	pcap_if_t *d;
 	int i = 0;
 	char errbuf[PCAP_ERRBUF_SIZE];
@@ -1238,7 +1288,11 @@ int captureIPPackets_rem(threadData_t* threadData){
 
 
 	// Jump to the selected adapter
-	for (d = threadData->alldevs, i = 0; i < netAdapterNmb - 1; d = d->next, i++);
+	for (d = threadData->alldevs, i = 0; i < netAdapterNmb - 1 && d != NULL; d = d->next, i++);
+	if (!d || !d->name) {
+		fprintf(stderr, "\nNo valid adapter selected for remote capture.\n");
+		return -1;
+	}
 
 	// Open the adapter
 	if ((adhandle = pcap_open_live(d->name,	// name of the device
@@ -1260,7 +1314,7 @@ int captureIPPackets_rem(threadData_t* threadData){
 		return -1;
 	}
 
-	if (d->addresses != NULL)
+	if (d->addresses != NULL && d->addresses->netmask != NULL)
 		// Retrieve the mask of the first address of the interface
 		netmask = ((struct sockaddr_in *)(d->addresses->netmask))->sin_addr.s_addr;
 	else
@@ -1282,7 +1336,7 @@ int captureIPPackets_rem(threadData_t* threadData){
 		return -1;
 	}
 
-	printf_s("\nlistening on %s for IP/RPC...\n", d->description);
+	printf_s("\nlistening on %s for IP/RPC...\n", d->description ? d->description : d->name);
 
 
 	// start the capture

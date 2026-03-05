@@ -495,7 +495,12 @@ int captureDCPPackets(threadData_t* threadData){
 
 
 	// Jump to the selected adapter 
-	for (d = threadData->alldevs, i = 0; i < netAdapterNmb - 1; d = d->next, i++);
+	for (d = threadData->alldevs, i = 0; i < netAdapterNmb - 1 && d != NULL; d = d->next, i++);
+
+	if (!d || !d->name) {
+		fprintf(stderr, "\nNo valid adapter selected for captureDCPPackets.\n");
+		return -1;
+	}
 
 	// Open the adapter 
 	if ((adhandle = pcap_open_live(d->name,	// name of the device
@@ -517,7 +522,7 @@ int captureDCPPackets(threadData_t* threadData){
 		return -1;
 	}
 
-	if (d->addresses != NULL)
+	if (d->addresses != NULL && d->addresses->netmask != NULL)
 		/* Retrieve the mask of the first address of the interface */
 		netmask = ((struct sockaddr_in *)(d->addresses->netmask))->sin_addr.s_addr;
 	else
@@ -539,7 +544,7 @@ int captureDCPPackets(threadData_t* threadData){
 		return -1;
 	}
 
-	printf_s("\nlistening on %s for pn_dcp...\n", d->description);
+	printf_s("\nlistening on %s for pn_dcp...\n", d->description ? d->description : d->name);
 
 
 	/* Retrieve the packets */
@@ -576,7 +581,12 @@ int captureIPPackets(threadData_t* threadData){
 
 
 	// Jump to the selected adapter 
-	for (d = threadData->alldevs, i = 0; i < netAdapterNmb - 1; d = d->next, i++);
+	for (d = threadData->alldevs, i = 0; i < netAdapterNmb - 1 && d != NULL; d = d->next, i++);
+
+	if (!d || !d->name) {
+		fprintf(stderr, "\nNo valid adapter selected for captureIPPackets.\n");
+		return -1;
+	}
 
 	// Open the adapter 
 	if ((adhandle = pcap_open_live(d->name,	// name of the device
@@ -598,7 +608,7 @@ int captureIPPackets(threadData_t* threadData){
 		return -1;
 	}
 
-	if (d->addresses != NULL)
+	if (d->addresses != NULL && d->addresses->netmask != NULL)
 		/* Retrieve the mask of the first address of the interface */
 		netmask = ((struct sockaddr_in *)(d->addresses->netmask))->sin_addr.s_addr;
 	else
@@ -620,7 +630,7 @@ int captureIPPackets(threadData_t* threadData){
 		return -1;
 	}
 
-	printf_s("\nlistening on %s for IP/RPC...\n", d->description);
+	printf_s("\nlistening on %s for IP/RPC...\n", d->description ? d->description : d->name);
 
 
 	/* start the capture */

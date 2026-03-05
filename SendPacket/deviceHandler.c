@@ -228,9 +228,16 @@ char* ip6tos(struct sockaddr *sockaddr, char *address, int addrlen)
 // @param threadData -> data struct
 void setOwnAddress(threadData_t* threadData)
 {
+	if (!threadData || !threadData->alldevs || netAdapterNmb < 1) {
+		return;
+	}
+
 	pcap_if_t *d;
 	int i;
-	for (d = threadData->alldevs, i = 0; i < netAdapterNmb - 1; d = d->next, i++);
+	for (d = threadData->alldevs, i = 0; i < netAdapterNmb - 1 && d != NULL; d = d->next, i++);
+	if (!d) {
+		return;
+	}
 
 	getIP_SUB(d, threadData);
 
@@ -240,22 +247,34 @@ void setOwnAddress(threadData_t* threadData)
 	sprintf_s(ip, sizeof(ip), "%d.%d.%d.%d", threadData->ownIp.byte1, threadData->ownIp.byte2, threadData->ownIp.byte3, threadData->ownIp.byte4);
 
 	mac_address* m_address = getMAC(ip);
+	if (!m_address) {
+		return;
+	}
 	threadData->ownMac.byte1 = m_address->byte1;
 	threadData->ownMac.byte2 = m_address->byte2;
 	threadData->ownMac.byte3 = m_address->byte3;
 	threadData->ownMac.byte4 = m_address->byte4;
 	threadData->ownMac.byte5 = m_address->byte5;
 	threadData->ownMac.byte6 = m_address->byte6;
+	free(m_address);
 
 }
 
 // extract the ip address and subnetmask from a given device
 void getIP_SUB(pcap_if_t *d, threadData_t* threadData)
 {
+	if (!d || !threadData) {
+		return;
+	}
+
 	pcap_addr_t *a;
 
 	/* IP addresses */
 	for (a = d->addresses; a; a = a->next) {
+		if (!a->addr) {
+			continue;
+		}
+
 		//ipv4 equals 2, we only need ipv4
 		switch (a->addr->sa_family)
 		{
