@@ -43,6 +43,10 @@ void packet_handler_dcp(u_char* param, const struct pcap_pkthdr *header, const u
 	profinet_prot *profinet;
 	datasheet* recData = NULL;
 	threadData_t* threadData = (threadData_t*)param;
+	bool hasIpParameter = false;
+	bool hasNameOfStation = false;
+	bool hasDeviceVendorValue = false;
+	bool hasDeviceId = false;
 
 	time_t local_tv_sec;
 
@@ -81,6 +85,9 @@ void packet_handler_dcp(u_char* param, const struct pcap_pkthdr *header, const u
 
 
 	recData = createDatasheet();
+	if (!recData) {
+		return;
+	}
 	while (bl_count < ntohs(profinet->dataLength)){
 		pn_block = (pn_data*)(pkt_data + pndcpOffset + 12 + bl_count);// pndcp header + blocklength of used blocks
 		pn_block->blocklength = ntohs(pn_block->blocklength);
@@ -112,6 +119,7 @@ void packet_handler_dcp(u_char* param, const struct pcap_pkthdr *header, const u
 				recData->defaultGateway.byte2 = defaultGateway->byte2;
 				recData->defaultGateway.byte3 = defaultGateway->byte3;
 				recData->defaultGateway.byte4 = defaultGateway->byte4;
+				hasIpParameter = true;
 
 				break;
 			case SUBOPT_IPO_FUllIPSuite:
@@ -140,6 +148,7 @@ void packet_handler_dcp(u_char* param, const struct pcap_pkthdr *header, const u
 					recData->deviceType[i] = (char)((*(vendorValue + i))); // go from byte after blockinfo till blocklength end
 				}
 				recData->deviceType[i] = '\0';
+				hasDeviceVendorValue = true;
 
 				break;
 			case SUBOPT_DPO_NameOfStation:;
@@ -158,12 +167,14 @@ void packet_handler_dcp(u_char* param, const struct pcap_pkthdr *header, const u
 					recData->nameOfStation[j] = (char)((*(vendorValue + j))); // go from byte after blockinfo till blocklength end
 				}
 				recData->nameOfStation[j] = '\0';
+				hasNameOfStation = true;
 				break;
 			case SUBOPT_DPO_DeviceID:
 				vendorValue = (u_char*)pn_block;
 				vendorValue += 6;
 				recData->vendorId = BytesTo16((u_char)*(vendorValue), (u_char)*(vendorValue + 1));
 				recData->deviceId = BytesTo16((u_char)*(vendorValue + 2), (u_char)*(vendorValue + 3));
+				hasDeviceId = true;
 				break;
 			case SUBOPT_DPO_DeviceRole:
 				vendorValue = (u_char*)pn_block;
@@ -221,6 +232,28 @@ void packet_handler_dcp(u_char* param, const struct pcap_pkthdr *header, const u
 	//print timestamp and length of the packet 
 	printf("%s.%06ld len:%d  %02x:%02x:%02x:%02x:%02x:%02x\n", timestr, (long)header->ts.tv_usec, header->len,
 		ethh->src_addrK.byte1, ethh->src_addrK.byte2, ethh->src_addrK.byte3, ethh->src_addrK.byte4, ethh->src_addrK.byte5, ethh->src_addrK.byte6);
+
+	if (hasIpParameter) {
+		printf("  DCP IP: %d.%d.%d.%d\n",
+			recData->deviceIp.byte1,
+			recData->deviceIp.byte2,
+			recData->deviceIp.byte3,
+			recData->deviceIp.byte4);
+	}
+	else {
+		printf("  DCP IP: <not present>\n");
+	}
+
+	printf("  DCP NameOfStation: %s\n", hasNameOfStation && recData->nameOfStation ? recData->nameOfStation : "<not present>");
+	printf("  DCP DeviceVendorValue: %s\n", hasDeviceVendorValue && recData->deviceType ? recData->deviceType : "<not present>");
+	if (hasDeviceId) {
+		printf("  DCP VendorID: 0x%04x\n", recData->vendorId);
+		printf("  DCP DeviceID: 0x%04x\n", recData->deviceId);
+	}
+	else {
+		printf("  DCP VendorID: <not present>\n");
+		printf("  DCP DeviceID: <not present>\n");
+	}
 
 	// check first, if it is NULL malloc the first box
 	linked_list_t* tmp = threadData->first;
