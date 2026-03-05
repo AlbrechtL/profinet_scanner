@@ -18,9 +18,156 @@
 // identification number of ip protocol
 unsigned short identnmb = 0;
 
+typedef struct cli_options {
+	bool interactive;
+	bool listInterfaces;
+	bool hasInterface;
+	bool hasMode;
+	bool hasTarget;
+	bool hasOutput;
+	int mode;
+	char interfaceValue[256];
+	char targetValue[32];
+	char outputValue[MAX_FILENAME_LENGTH];
+} cli_options_t;
+
+static void printHelp(const char* programName)
+{
+	printf("Usage:\n");
+	printf("  %s --help\n", programName);
+	printf("  %s --list-interfaces\n", programName);
+	printf("  %s --interface <index|name> --mode <local|remote> [--target <a.b.c.d[-e]>] --output <file.xml>\n", programName);
+	printf("  %s --interactive\n\n", programName);
+
+	printf("Options:\n");
+	printf("  --help               Show this help message and exit.\n");
+	printf("  --list-interfaces    List available capture interfaces and exit.\n");
+	printf("  --interface VALUE    Interface index (1-based) or interface name from --list-interfaces.\n");
+	printf("  --mode VALUE         Scan mode: local or remote.\n");
+	printf("  --target VALUE       Remote target IP or range in the form a.b.c.d or a.b.c.d-e.\n");
+	printf("                       Required when --mode remote is used.\n");
+	printf("  --output PATH        Output XML file path. Required in non-interactive mode.\n");
+	printf("  --interactive        Run prompt-based mode (default when no arguments are given).\n\n");
+
+	printf("Examples:\n");
+	printf("  %s --list-interfaces\n", programName);
+	printf("  %s --interface 1 --mode local --output scan.xml\n", programName);
+	printf("  %s --interface eth0 --mode remote --target 192.168.0.10-20 --output remote_scan.xml\n", programName);
+}
+
+static void printInterfaces(threadData_t* threadData)
+{
+	pcap_if_t* device;
+	int index = 1;
+
+	printf("Available interfaces:\n");
+	for (device = threadData->alldevs; device != NULL; device = device->next, index++) {
+		printf("  [%d] %s", index, device->name ? device->name : "(unknown)");
+		if (device->description) {
+			printf(" - %s", device->description);
+		}
+		printf("\n");
+	}
+}
+
+static int resolveInterfaceIndex(threadData_t* threadData, const char* interfaceValue)
+{
+	if (!interfaceValue || interfaceValue[0] == '\0') {
+		return -1;
+	}
+
+	char* endptr = NULL;
+	long parsedIndex = strtol(interfaceValue, &endptr, 10);
+	if (endptr && *endptr == '\0') {
+		if (parsedIndex >= 1 && parsedIndex <= threadData->numberOfAdapters) {
+			return (int)parsedIndex;
+		}
+		return -1;
+	}
+
+	pcap_if_t* device;
+	int index = 1;
+	for (device = threadData->alldevs; device != NULL; device = device->next, index++) {
+		if (device->name && strcmp(device->name, interfaceValue) == 0) {
+			return index;
+		}
+	}
+
+	return -1;
+}
+
 int main(int argc, char **argv) {
-	(void)argc;
-	(void)argv;
+	cli_options_t options;
+	int inum = 0;
+	int mode = -1;
+
+	memset(&options, 0, sizeof(options));
+	options.mode = -1;
+	options.interactive = (argc == 1);
+
+	for (int argumentIndex = 1; argumentIndex < argc; argumentIndex++) {
+		if (strcmp(argv[argumentIndex], "--help") == 0) {
+			printHelp(argv[0]);
+			return 0;
+		}
+		if (strcmp(argv[argumentIndex], "--interactive") == 0) {
+			options.interactive = true;
+			continue;
+		}
+		if (strcmp(argv[argumentIndex], "--list-interfaces") == 0) {
+			options.listInterfaces = true;
+			continue;
+		}
+		if (strcmp(argv[argumentIndex], "--interface") == 0) {
+			if (argumentIndex + 1 >= argc) {
+				printf("Missing value for --interface\n");
+				return -1;
+			}
+			strcpy_s(options.interfaceValue, sizeof(options.interfaceValue), argv[++argumentIndex]);
+			options.hasInterface = true;
+			continue;
+		}
+		if (strcmp(argv[argumentIndex], "--mode") == 0) {
+			if (argumentIndex + 1 >= argc) {
+				printf("Missing value for --mode\n");
+				return -1;
+			}
+
+			char* modeArg = argv[++argumentIndex];
+			if (strcmp(modeArg, "local") == 0) {
+				options.mode = 0;
+			} else if (strcmp(modeArg, "remote") == 0) {
+				options.mode = 1;
+			} else {
+				printf("Invalid --mode value: %s (use local or remote)\n", modeArg);
+				return -1;
+			}
+			options.hasMode = true;
+			continue;
+		}
+		if (strcmp(argv[argumentIndex], "--target") == 0) {
+			if (argumentIndex + 1 >= argc) {
+				printf("Missing value for --target\n");
+				return -1;
+			}
+			strcpy_s(options.targetValue, sizeof(options.targetValue), argv[++argumentIndex]);
+			options.hasTarget = true;
+			continue;
+		}
+		if (strcmp(argv[argumentIndex], "--output") == 0) {
+			if (argumentIndex + 1 >= argc) {
+				printf("Missing value for --output\n");
+				return -1;
+			}
+			strcpy_s(options.outputValue, sizeof(options.outputValue), argv[++argumentIndex]);
+			options.hasOutput = true;
+			continue;
+		}
+
+		printf("Unknown argument: %s\n", argv[argumentIndex]);
+		printf("Use --help to see available options.\n");
+		return -1;
+	}
 
 	// check if on windows, if so then load the npcap library
 #ifdef WIN32
@@ -36,8 +183,6 @@ int main(int argc, char **argv) {
 
 	// Pointer to the Exitcode of a thread
 	LPDWORD lpExitCode = NULL;
-	// obtain devicelist and print it
-	int inum = 0;
 
 	// get the list of possible devices
 	if (obtainDeviceList(threadData) != 0)
@@ -46,10 +191,34 @@ int main(int argc, char **argv) {
 		return -1;
 	}
 
-	// get interfacenumber to scan and send
-	printf_s("Enter the interface number (1-%d):", threadData->numberOfAdapters);
-	scanf_s("%d", &inum);
-	getchar(); // flush buffer
+	if (options.listInterfaces)
+	{
+		printInterfaces(threadData);
+		pcap_freealldevs(threadData->alldevs);
+		free(threadData);
+		return 0;
+	}
+
+	if (options.hasInterface) {
+		inum = resolveInterfaceIndex(threadData, options.interfaceValue);
+		if (inum < 1 || inum > threadData->numberOfAdapters) {
+			printf_s("\nInterface value out of range or unknown: %s\n", options.interfaceValue);
+			pcap_freealldevs(threadData->alldevs);
+			free(threadData);
+			return -1;
+		}
+	} else if (options.interactive) {
+		// get interfacenumber to scan and send
+		printInterfaces(threadData);
+		printf_s("Enter the interface number (1-%d):", threadData->numberOfAdapters);
+		scanf_s("%d", &inum);
+		getchar(); // flush buffer
+	} else {
+		printf("Missing required option --interface in non-interactive mode\n");
+		pcap_freealldevs(threadData->alldevs);
+		free(threadData);
+		return -1;
+	}
 
 
 
@@ -74,25 +243,53 @@ int main(int argc, char **argv) {
 
 
 
-	printf("\nScan local (0) or remote (1): \n");
-	scanf_s("%d", &inum);
-	getchar(); // flush buffer
+	if (options.hasMode) {
+		mode = options.mode;
+	} else if (options.interactive) {
+		printf("\nScan local (0) or remote (1): \n");
+		scanf_s("%d", &mode);
+		getchar(); // flush buffer
+	} else {
+		printf("Missing required option --mode in non-interactive mode\n");
+		pcap_freealldevs(threadData->alldevs);
+		free(threadData);
+		return -1;
+	}
+
+	if (mode != 0 && mode != 1)
+	{
+		printf("Invalid mode value. Use 0/1 in interactive mode or --mode local|remote in CLI mode.\n");
+		pcap_freealldevs(threadData->alldevs);
+		free(threadData);
+		return -1;
+	}
 
 
-	if (inum == 1)
+	if (mode == 1)
 	{
 		// insert target ip address   
-		printf_s("\nTarget IP address form xxx.xxx.xxx.xxx-xxx: \n");
 		char targetIP[4 * 3 + 3 + 1 + 1 + 3]; // 4*3 numbers, 3 dots and 1 \0
 		targetIP[0] = 0;	// first init to zero
 
+		if (options.hasTarget) {
+			strcpy_s(targetIP, sizeof(targetIP), options.targetValue);
+		} else if (options.interactive) {
+			printf_s("\nTarget IP address form xxx.xxx.xxx.xxx-xxx: \n");
+			fgets(targetIP, sizeof(targetIP), stdin);
+		} else {
+			printf("Missing required option --target for remote mode\n");
+			pcap_freealldevs(threadData->alldevs);
+			free(threadData);
+			return -1;
+		}
 
-		fgets(targetIP, sizeof(targetIP), stdin);
 		int range;
 		if ((range = checkIP(targetIP, threadData)) == -1){
 			pcap_freealldevs(threadData->alldevs);
 			free(threadData);
-			system("pause");
+			if (options.interactive) {
+				system("pause");
+			}
 			return -1; // false IP
 		}
 
@@ -119,7 +316,9 @@ int main(int argc, char **argv) {
 			printf_s("No devices found with given ip\n\n");
 			pcap_freealldevs(threadData->alldevs);
 			free(threadData);
-			system("pause");
+			if (options.interactive) {
+				system("pause");
+			}
 			return -1;
 		}
 		printf_s("\nRPC lookup first call finished \n\n");
@@ -337,10 +536,26 @@ int main(int argc, char **argv) {
 	printf_s("\n\nWrite to file started\n\n");
 	linked_list_t* tmp = threadData->first;
 	char buff[MAX_FILENAME_LENGTH];
-	printf("Please insert path/filename max %d characters, ending .xml\n", MAX_FILENAME_LENGTH);
-	fgets(buff, sizeof(buff), stdin);
+	buff[0] = '\0';
+	if (options.hasOutput) {
+		strcpy_s(buff, sizeof(buff), options.outputValue);
+	} else if (options.interactive) {
+		printf("Please insert path/filename max %d characters, ending .xml\n", MAX_FILENAME_LENGTH);
+		fgets(buff, sizeof(buff), stdin);
+		stripEnter(buff, "\n");
+	} else {
+		printf("Missing required option --output in non-interactive mode\n");
+		empty_list(threadData->first);
+		free(threadData);
+		return -1;
+	}
 
-	stripEnter(buff, "\n");
+	if (buff[0] == '\0') {
+		printf("Output path must not be empty\n");
+		empty_list(threadData->first);
+		free(threadData);
+		return -1;
+	}
 
 
 	while (tmp != NULL)
@@ -349,9 +564,12 @@ int main(int argc, char **argv) {
 		tmp = tmp->next;
 	}
 	printf_s("Write to file finished\n\n");
-	system("pause");
+	if (options.interactive) {
+		system("pause");
+	}
 
 	empty_list(threadData->first);
+	free(threadData);
 
 	return 0;
 }

@@ -9,6 +9,7 @@ A port of the original Windows-only [Profinet scanner by Eiwanger](https://githu
 - [Features](#features)
 - [Build (Linux)](#build-linux)
 - [Usage](#usage)
+- [CLI Options](#cli-options)
 - [Protocols](#protocols)
 - [TODO](#todo)
 - [Thanks](#thanks)
@@ -60,7 +61,58 @@ Run the scanner from the build directory. Example:
 ./build/SendPacket/pn_scanner
 ```
 
-Refer to code comments and source for usage details and options.
+The program supports interactive mode (default) and non-interactive CLI mode.
+
+- Interactive mode (default):
+  ```sh
+  ./build/SendPacket/pn_scanner
+  ```
+- Show help:
+  ```sh
+  ./build/SendPacket/pn_scanner --help
+  ```
+- List interfaces:
+  ```sh
+  ./build/SendPacket/pn_scanner --list-interfaces
+  ```
+
+---
+
+## CLI Options
+
+```txt
+--help
+	Show help message and exit.
+
+--list-interfaces
+	Print available capture interfaces and exit.
+
+--interface <index|name>
+	Select interface by 1-based index (from --list-interfaces) or interface name.
+
+--mode <local|remote>
+	Select scan mode.
+
+--target <a.b.c.d[-e]>
+	Remote target IP or range. Required when --mode remote is used.
+	Examples: 192.168.0.10, 192.168.0.10-20
+
+--output <file.xml>
+	Output XML file path. Required in non-interactive mode.
+
+--interactive
+	Force prompt-based mode (also the default when no parameters are provided).
+```
+
+Examples:
+
+```sh
+# Local scan (non-interactive)
+./build/SendPacket/pn_scanner --interface 1 --mode local --output local_scan.xml
+
+# Remote scan (non-interactive)
+./build/SendPacket/pn_scanner --interface eth0 --mode remote --target 192.168.0.10-20 --output remote_scan.xml
+```
 
 ---
 

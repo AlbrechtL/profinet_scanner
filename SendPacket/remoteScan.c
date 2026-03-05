@@ -1316,98 +1316,82 @@ DWORD WINAPI sniffer_thread_remote(LPVOID lpParameter)
 // @param threadData -> pointer to threadData struct, place to store the parsed ip address
 int checkIP(char* targetIP, threadData_t* threadData)
 {
-	if (targetIP[0] == 0)	// empty
+	if (!targetIP || targetIP[0] == 0)	// empty
 		return -1;
 
-	int length;
-	for (length = 0; targetIP[length] != '\n'; length++);
-	if (length < 7)
+	char trimmedTarget[64];
+	size_t sourceLength = strlen(targetIP);
+	if (sourceLength >= sizeof(trimmedTarget)) {
+		printf("Target IP too long\n");
+		return -1;
+	}
+
+	strcpy_s(trimmedTarget, sizeof(trimmedTarget), targetIP);
+
+	while (sourceLength > 0 &&
+		(trimmedTarget[sourceLength - 1] == '\n' ||
+		trimmedTarget[sourceLength - 1] == '\r' ||
+		trimmedTarget[sourceLength - 1] == ' ' ||
+		trimmedTarget[sourceLength - 1] == '\t')) {
+		trimmedTarget[sourceLength - 1] = '\0';
+		sourceLength--;
+	}
+
+	if (sourceLength < 7)
 	{
-		printf("Target IP to short\n");
+		printf("Target IP too short\n");
 		return -1;
 	}
 
+	int byte1 = -1;
+	int byte2 = -1;
+	int byte3 = -1;
+	int startByte4 = -1;
+	int endByte4 = -1;
 
-
-	char* token;
-	char* rangeToken;
-	int endrange;
-	char* copyIP;
-	char* context = malloc(128);
-	if (context == NULL){
-		printf("Error allocating memory for context in checkIP");
-		return -1;
-	}
-	int address[4];
-
-	if ((copyIP = malloc(sizeof(char) * (strlen(targetIP) + 1))) == NULL)
-	{
-		printf("Error allocating memory for ip buffer");
+	if (sscanf(trimmedTarget, "%d.%d.%d.%d-%d", &byte1, &byte2, &byte3, &startByte4, &endByte4) == 5) {
+		/* parsed range format */
+	} else if (sscanf(trimmedTarget, "%d.%d.%d.%d", &byte1, &byte2, &byte3, &startByte4) == 4) {
+		endByte4 = startByte4;
+	} else {
+		printf("Invalid target format. Use a.b.c.d or a.b.c.d-e\n");
 		return -1;
 	}
 
-	strcpy_s(copyIP, strlen(targetIP) + 1, targetIP);
-
-	char* searchdot = ".";
-	char* rangeSearch = "-";
-	bool isrange = false;
-
-	// check if the ip is a range
-	for (int i = 0; targetIP[i] != '\n'; i++){
-		if (targetIP[i] == '-'){
-			isrange = true;
-		}
-	}
-
-	if ((token = malloc(sizeof(char) * 4)) == NULL)
-	{
-		printf("Error allocating memory for ip token");
+	if (byte1 < 0 || byte1 > 255 ||
+		byte2 < 0 || byte2 > 255 ||
+		byte3 < 0 || byte3 > 255 ||
+		startByte4 < 0 || startByte4 > 255 ||
+		endByte4 < 0 || endByte4 > 255) {
+		printf("Invalid target IP values\n");
 		return -1;
 	}
 
-	if ((rangeToken = malloc(sizeof(char) * 4)) == NULL)
-	{
-		printf("Error allocating memory for ip range token");
+	if (endByte4 < startByte4) {
+		printf("Invalid target range. End must be >= start\n");
 		return -1;
 	}
 
-	int a = 0;
-	token = strtok_s(copyIP, searchdot, &context);
-	do{
-		address[a] = (int)strtol(token, NULL, 10); // 10 for decimal // get the last address of the range
+	int range = endByte4 - startByte4;
 
-		a++;
-	} while ((token = strtok_s(NULL, searchdot, &context)) != NULL && a < 4);
-
-	strcpy_s(copyIP, strlen(targetIP) + 1, targetIP);
-	// debug
-	if (isrange)
-	{
-		token = strtok_s(copyIP, rangeSearch, &context);
-		rangeToken = strtok_s(NULL, rangeSearch, &context);
-		endrange = (int)strtol(rangeToken, NULL, 10); // 10 for decimal // get the last address of the range
+	if (threadData->targetIP) {
+		free(threadData->targetIP);
 	}
-	else{
-		endrange = address[3];
-	}
-
-	// calc range
-	int range = endrange - address[3];
 
 
 	threadData->targetIP = malloc(sizeof(ip_address) * (range+1));
 	if (!threadData->targetIP)
 	{
 		printf("Error allocating memory for ip address range");
-		return false;
+		return -1;
 	}
 	int i = 0;
 
 	do{
-		threadData->targetIP[i].byte1 = (u_char)address[0];
-		threadData->targetIP[i].byte2 = (u_char)address[1];
-		threadData->targetIP[i].byte3 = (u_char)address[2];
-		threadData->targetIP[i].byte4 = (u_char)(address[3] + i);
+		threadData->targetIP[i].byte1 = (u_char)byte1;
+		threadData->targetIP[i].byte2 = (u_char)byte2;
+		threadData->targetIP[i].byte3 = (u_char)byte3;
+		threadData->targetIP[i].byte4 = (u_char)(startByte4 + i);
 		i++;
 	} while (i <= range);
 

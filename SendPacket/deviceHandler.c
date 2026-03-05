@@ -7,9 +7,48 @@
 #include <arpa/inet.h>
 #include <ifaddrs.h>
 #include <net/if.h>
+#include <net/if_arp.h>
 #include <netinet/in.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
+#endif
+
+#ifndef _WIN32
+static bool isRealEthernetInterface(const char* ifname)
+{
+	if (!ifname || ifname[0] == '\0') {
+		return false;
+	}
+
+	char pathBuffer[256];
+	snprintf(pathBuffer, sizeof(pathBuffer), "/sys/class/net/%s/device", ifname);
+	if (access(pathBuffer, F_OK) != 0) {
+		return false;
+	}
+
+	snprintf(pathBuffer, sizeof(pathBuffer), "/sys/class/net/%s/wireless", ifname);
+	if (access(pathBuffer, F_OK) == 0) {
+		return false;
+	}
+
+	int fd = socket(AF_INET, SOCK_DGRAM, 0);
+	if (fd < 0) {
+		return false;
+	}
+
+	struct ifreq ifr;
+	memset(&ifr, 0, sizeof(ifr));
+	strncpy(ifr.ifr_name, ifname, IFNAMSIZ - 1);
+
+	if (ioctl(fd, SIOCGIFHWADDR, &ifr) < 0) {
+		close(fd);
+		return false;
+	}
+
+	close(fd);
+	return ifr.ifr_hwaddr.sa_family == ARPHRD_ETHER;
+}
 #endif
 
 // function which lists all pcap compatible adapters
@@ -29,18 +68,35 @@ int obtainDeviceList(threadData_t* threadData)
 		exit(1);
 	}
 
-	/* Print the list */
-	for (d = alldevs; d != NULL; d = d->next)
+	pcap_if_t* filteredHead = NULL;
+	pcap_if_t* filteredTail = NULL;
+
+	for (d = alldevs; d != NULL; )
 	{
-		// Scan the list printing every entry
+		pcap_if_t* next = d->next;
+		d->next = NULL;
 
-		printf("%d. %s", ++(adaperCount), d->name);
-		if (d->description)
-			printf(" (%s)\n", d->description);
-		else
-			printf(" (No description available)\n");
+#ifndef _WIN32
+		if (!isRealEthernetInterface(d->name)) {
+			pcap_freealldevs(d);
+			d = next;
+			continue;
+		}
+#endif
 
+		if (!filteredHead) {
+			filteredHead = d;
+			filteredTail = d;
+		} else {
+			filteredTail->next = d;
+			filteredTail = d;
+		}
+
+		adaperCount++;
+		d = next;
 	}
+
+	alldevs = filteredHead;
 
 
 	/*
@@ -56,7 +112,7 @@ int obtainDeviceList(threadData_t* threadData)
 
 	if ((adaperCount) == 0)
 	{
-		printf("\nNo interfaces found! Make sure Npcap is installed.\n");
+		printf("\nNo suitable Ethernet interfaces found.\n");
 
 		// wait to see if it worked
 
