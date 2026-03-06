@@ -106,14 +106,8 @@ The program supports interactive mode (default) and non-interactive CLI mode.
 Examples:
 
 ```sh
-# Local scan (non-interactive)
+# Local (DCP) scan (non-interactive)
 ./build/SendPacket/pn_scanner --interface 1 --mode local
-
-# Remote scan (non-interactive)
-./build/SendPacket/pn_scanner --interface eth0 --mode remote --target 192.168.0.10-20
-
-# Remote scan with a 10-second limit
-./build/SendPacket/pn_scanner --interface eth0 --mode remote --target 192.168.0.10 --duration 10
 
 # Real world example
 sudo ./build/SendPacket/pn_scanner --interface enp0s31f6 --mode local
@@ -126,6 +120,33 @@ listening on enp0s31f6 for pn_dcp...
   DCP DeviceVendorValue: iTEMP TMT86
   DCP VendorID: 0x0011
   DCP DeviceID: 0xa3ff
+
+# Remote scan (DCE/RPC) (non-interactive)
+./build/SendPacket/pn_scanner --interface eth0 --mode remote --target 192.168.0.10-20
+
+# Real world example
+./build/SendPacket/pn_scanner --interface eth0 --mode remote --target 192.168.1.110 --duration 2
+Send RPC lookup endpointmapper first call 
+
+listening on eth0 for IP/RPC...
+10:47:08.420661 len:338  192.168.1.110
+
+Scan duration reached; stopping early.
+
+Scan results (stdout):
+
+Device
+  IP: 192.168.1.110
+  MAC: 00:15:5d:67:b6:76
+  Name: 
+  Type: Switch series IE-SW-ALM
+  Annotation: Switch series IE-SW-ALM   2682370000               1 V  1 37  0
+  Order ID: 2682370000
+  SW Version: V 1.37.0
+  HW Revision: 1
+  Vendor ID: 0x0000
+  Device ID: 0x0000
+  UDP Port: 34964
 ```
 
 ---
