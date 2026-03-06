@@ -24,7 +24,9 @@ typedef struct cli_options {
 	bool hasInterface;
 	bool hasMode;
 	bool hasTarget;
+	bool hasDuration;
 	int mode;
+	long durationSeconds;
 	char interfaceValue[256];
 	char targetValue[32];
 } cli_options_t;
@@ -35,6 +37,7 @@ static void printHelp(const char* programName)
 	printf("  %s --help\n", programName);
 	printf("  %s --list-interfaces\n", programName);
 	printf("  %s --interface <index|name> --mode <local|remote> [--target <a.b.c.d[-e]>]\n", programName);
+	printf("  %s --interface <index|name> --mode <local|remote> [--target <a.b.c.d[-e]>] [--duration <seconds>]\n", programName);
 	printf("  %s --interactive\n\n", programName);
 
 	printf("Options:\n");
@@ -44,12 +47,14 @@ static void printHelp(const char* programName)
 	printf("  --mode VALUE         Scan mode: local (DCP) or remote (DCE/RPC).\n");
 	printf("  --target VALUE       Remote target IP or range in the form a.b.c.d or a.b.c.d-e.\n");
 	printf("                       Required when --mode remote is used.\n");
+	printf("  --duration SECONDS   Stop capture after the given number of seconds.\n");
 	printf("  --interactive        Run prompt-based mode (default when no arguments are given).\n\n");
 
 	printf("Examples:\n");
 	printf("  %s --list-interfaces\n", programName);
 	printf("  %s --interface 1 --mode local\n", programName);
 	printf("  %s --interface eth0 --mode remote --target 192.168.0.10-20\n", programName);
+	printf("  %s --interface eth0 --mode remote --target 192.168.0.10 --duration 10\n", programName);
 }
 
 static void printDeviceSummary(const datasheet* device)
@@ -73,6 +78,9 @@ static void printDeviceSummary(const datasheet* device)
 		device->deviceMACaddress.byte6 & 0xFF);
 	printf("  Name: %s\n", device->nameOfStation ? device->nameOfStation : "");
 	printf("  Type: %s\n", device->deviceType ? device->deviceType : "");
+	if (device->annotation && device->annotation[0] != '\0') {
+		printf("  Annotation: %s\n", device->annotation);
+	}
 	printf("  Order ID: %s\n", device->orderId ? device->orderId : "");
 	printf("  SW Version: %s\n", device->version ? device->version : "");
 	printf("  HW Revision: %s\n", device->hardwareRevison ? device->hardwareRevison : "");
@@ -196,6 +204,22 @@ int main(int argc, char **argv) {
 			options.hasTarget = true;
 			continue;
 		}
+		if (strcmp(argv[argumentIndex], "--duration") == 0) {
+			if (argumentIndex + 1 >= argc) {
+				printf("Missing value for --duration\n");
+				return -1;
+			}
+			char* durationArg = argv[++argumentIndex];
+			char* endptr = NULL;
+			long parsedSeconds = strtol(durationArg, &endptr, 10);
+			if (!endptr || *endptr != '\0' || parsedSeconds <= 0) {
+				printf("Invalid --duration value: %s (use a positive integer)\n", durationArg);
+				return -1;
+			}
+			options.durationSeconds = parsedSeconds;
+			options.hasDuration = true;
+			continue;
+		}
 
 		printf("Unknown argument: %s\n", argv[argumentIndex]);
 		printf("Use --help to see available options.\n");
@@ -228,6 +252,7 @@ int main(int argc, char **argv) {
 
 	// allocate memory for temporary storage for device data and the data the functions need
 	threadData_t* threadData = createDataStruct();
+	g_scanStopRequested = false;
 
 	// Pointer to the Exitcode of a thread
 	LPDWORD lpExitCode = NULL;
@@ -291,6 +316,9 @@ int main(int argc, char **argv) {
 	if (defaultGatewayIP) {
 		free(defaultGatewayIP);
 	}
+
+	g_scanDurationMs = options.hasDuration ? (options.durationSeconds * 1000L) : 0;
+	g_scanStartMs = g_scanDurationMs > 0 ? get_monotonic_ms() : 0;
 
 
 
@@ -370,6 +398,10 @@ int main(int argc, char **argv) {
 		}
 
 		WaitForSingleObject(sniffThreadrem, INFINITE);
+		if (g_scanStopRequested) {
+			printf_s("\nScan duration reached; stopping early.\n");
+			goto finalize;
+		}
 
 
 		int defcount = linkedlist_status(threadData->first);
@@ -394,6 +426,10 @@ int main(int argc, char **argv) {
 			sendPacket_RPC_rem(threadData, false);
 		}
 		WaitForSingleObject(sniffThreadrem, INFINITE);
+		if (g_scanStopRequested) {
+			printf_s("\nScan duration reached; stopping early.\n");
+			goto finalize;
+		}
 
 
 		printf_s("\nRPC lookup second call finished \n\n");
@@ -407,6 +443,10 @@ int main(int argc, char **argv) {
 			sendpacket_IM_rem(threadData, PDREALDATA, NULL, 3);
 		}
 		WaitForSingleObject(sniffThreadrem, INFINITE);
+		if (g_scanStopRequested) {
+			printf_s("\nScan duration reached; stopping early.\n");
+			goto finalize;
+		}
 
 
 		printf_s("\nPDRealData call finished \n\n");
@@ -419,6 +459,10 @@ int main(int argc, char **argv) {
 			sendpacket_IM_rem(threadData, REALIDENTIFICATIONDATA, NULL, 3);  // get all slots of the device
 		}
 		WaitForSingleObject(sniffThreadrem, INFINITE);
+		if (g_scanStopRequested) {
+			printf_s("\nScan duration reached; stopping early.\n");
+			goto finalize;
+		}
 
 		printf_s("\nRealIdentificationData call finished \n\n");
 
@@ -449,6 +493,10 @@ int main(int argc, char **argv) {
 
 		}
 		WaitForSingleObject(sniffThreadrem, INFINITE);
+		if (g_scanStopRequested) {
+			printf_s("\nScan duration reached; stopping early.\n");
+			goto finalize;
+		}
 		printf_s("\nPDRealData for each subslot call finished \n\n");
 
 		printf_s("\nSend RPC implicit read I&M data for each module \n");
@@ -469,6 +517,10 @@ int main(int argc, char **argv) {
 			}
 		}
 		WaitForSingleObject(sniffThreadrem, INFINITE);
+		if (g_scanStopRequested) {
+			printf_s("\nScan duration reached; stopping early.\n");
+			goto finalize;
+		}
 
 		printf_s("\nI&M data call for each module finished \n\n");
 
@@ -483,6 +535,10 @@ int main(int argc, char **argv) {
 		sendPacket_DCP(threadData);
 
 		WaitForSingleObject(sniffThread, INFINITE);
+		if (g_scanStopRequested) {
+			printf_s("\nScan duration reached; stopping early.\n");
+			goto finalize;
+		}
 		// every time a packet is recieved the timer of pcap_next_ex is restored to TIMEOUT seconds, if the TIMEOUT seconds are over the function returns 0
 		printf_s("\npn_dcp finished\n\n");
 		// so far so good it works
@@ -509,6 +565,10 @@ int main(int argc, char **argv) {
 		}
 
 		WaitForSingleObject(sniffThread, INFINITE);
+		if (g_scanStopRequested) {
+			printf_s("\nScan duration reached; stopping early.\n");
+			goto finalize;
+		}
 
 		printf_s("\nRPC lookup first call finished \n\n");
 
@@ -521,6 +581,10 @@ int main(int argc, char **argv) {
 			sendPacket_RPC(threadData);
 		}
 		WaitForSingleObject(sniffThread, INFINITE);
+		if (g_scanStopRequested) {
+			printf_s("\nScan duration reached; stopping early.\n");
+			goto finalize;
+		}
 		printf_s("\nRPC lookup second call finished \n\n");
 
 
@@ -533,6 +597,10 @@ int main(int argc, char **argv) {
 			sendpacket_IM_rem(threadData, REALIDENTIFICATIONDATA, NULL, 2);  // get all slots of the device
 		}
 		WaitForSingleObject(sniffThread, INFINITE);
+		if (g_scanStopRequested) {
+			printf_s("\nScan duration reached; stopping early.\n");
+			goto finalize;
+		}
 
 
 		// send a request for each slot and subslot to get the data out of them
@@ -561,6 +629,10 @@ int main(int argc, char **argv) {
 
 		}
 		WaitForSingleObject(sniffThread, INFINITE);
+		if (g_scanStopRequested) {
+			printf_s("\nScan duration reached; stopping early.\n");
+			goto finalize;
+		}
 		printf_s("\nPDRealData for each subslot call finished \n\n");
 
 
@@ -591,6 +663,7 @@ int main(int argc, char **argv) {
 
 
 	// free list of devices
+finalize:
 	pcap_freealldevs(threadData->alldevs);
 
 

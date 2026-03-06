@@ -96,6 +96,9 @@ The program supports interactive mode (default) and non-interactive CLI mode.
 	Remote target IP or range. Required when --mode remote is used.
 	Examples: 192.168.0.10, 192.168.0.10-20
 
+--duration <seconds>
+  Stop the scan after the given number of seconds (applies to the overall run).
+
 --interactive
 	Force prompt-based mode (also the default when no parameters are provided).
 ```
@@ -108,6 +111,9 @@ Examples:
 
 # Remote scan (non-interactive)
 ./build/SendPacket/pn_scanner --interface eth0 --mode remote --target 192.168.0.10-20
+
+# Remote scan with a 10-second limit
+./build/SendPacket/pn_scanner --interface eth0 --mode remote --target 192.168.0.10 --duration 10
 
 # Real world example
 sudo ./build/SendPacket/pn_scanner --interface enp0s31f6 --mode local

@@ -1169,6 +1169,9 @@ void packet_handler_IP_rem(u_char* param, const struct pcap_pkthdr *header, cons
 	recData->udpPort = ntohs(dcerpccall->epm_response.entries.entryService.towerPointer.floor4_udp.udp_port);
 
 	recData->version = cutSoftVersion(versions);
+	recData->annotation = extractAnnotationString(
+		dcerpccall->epm_response.entries.entryService.towerPointer.annotation,
+		sizeof(dcerpccall->epm_response.entries.entryService.towerPointer.annotation));
 
 
 	recData->objectUUID = dcerpccall->epm_response.entries.entryService.oUUID;
@@ -1244,6 +1247,7 @@ void packet_handler_IP_rem(u_char* param, const struct pcap_pkthdr *header, cons
 				tmpList->device->orderId = recData->orderId;
 				tmpList->device->version = recData->version;
 				tmpList->device->hardwareRevison = recData->hardwareRevison;
+				tmpList->device->annotation = recData->annotation;
 				tmpList->device->udpPort = recData->udpPort;
 				tmpList->device->objectUUID = recData->objectUUID;
 				tmpList->device->deviceId = recData->deviceId;
@@ -1262,7 +1266,7 @@ void packet_handler_IP_rem(u_char* param, const struct pcap_pkthdr *header, cons
 		threadData->devCount++;
 	}
 
-	t1_G = clock();
+	t1_G = get_monotonic_ms();
 }
 
 
@@ -1341,7 +1345,7 @@ int captureIPPackets_rem(threadData_t* threadData){
 
 	// start the capture
 	// the second parameter is a packet count, if it is reached, loop will be terminated 0 or -1 equals infinity
-	t1_G = clock();
+	t1_G = get_monotonic_ms();
 	HANDLE loopBreakThread = CreateThread(NULL, 0, loopTimerThread, NULL, 0, lpExitCode);
 	if (loopBreakThread == NULL)
 	{

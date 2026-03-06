@@ -5,7 +5,7 @@
 #ifndef REMOTESCAN_H
 #define REMOTESCAN_H
 
-extern clock_t t1_G;
+extern uint64_t t1_G;
 extern pcap_t *adhandle;
 
 

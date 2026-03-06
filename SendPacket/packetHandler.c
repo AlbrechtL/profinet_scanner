@@ -1295,6 +1295,7 @@ datasheet* createDatasheet()
 	ds->slotList = NULL;
 	ds->orderId = NULL;
 	ds->hardwareRevison = NULL;
+	ds->annotation = NULL;
 	ds->udpPort = 0x0000;
 
 	return ds;

@@ -758,6 +758,7 @@ typedef struct datasheet{
 	char* version;
 	char* orderId;
 	char* hardwareRevison;
+	char* annotation;
 	u_short udpPort;
 
 	linkedList_slot* slotList;

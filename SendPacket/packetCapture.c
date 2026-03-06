@@ -3,7 +3,23 @@
 #include "deviceHandler.h"
 
 pcap_t *adhandle;
-clock_t t1_G;
+uint64_t t1_G;
+long g_scanDurationMs = 0;
+bool g_scanStopRequested = false;
+uint64_t g_scanStartMs = 0;
+
+uint64_t get_monotonic_ms(void)
+{
+#ifdef _WIN32
+	return (uint64_t)GetTickCount64();
+#else
+	struct timespec ts;
+	if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+		return 0;
+	}
+	return ((uint64_t)ts.tv_sec * 1000ULL) + (uint64_t)(ts.tv_nsec / 1000000ULL);
+#endif
+}
 
 static int getPndcpOffset(const u_char* pkt_data, bpf_u_int32 caplen)
 {
@@ -301,7 +317,7 @@ void packet_handler_dcp(u_char* param, const struct pcap_pkthdr *header, const u
 	}
 	// update timer
 
-	t1_G = clock();
+	t1_G = get_monotonic_ms();
 }
 
 
@@ -380,6 +396,9 @@ void packet_handler_IP(u_char* param, const struct pcap_pkthdr *header, const u_
 	recData->udpPort = ntohs(dcerpccall->epm_response.entries.entryService.towerPointer.floor4_udp.udp_port);
 
 	recData->version = cutSoftVersion(versions);
+	recData->annotation = extractAnnotationString(
+		dcerpccall->epm_response.entries.entryService.towerPointer.annotation,
+		sizeof(dcerpccall->epm_response.entries.entryService.towerPointer.annotation));
 
 
 
@@ -433,6 +452,7 @@ void packet_handler_IP(u_char* param, const struct pcap_pkthdr *header, const u_
 			tmpList->device->orderId = recData->orderId;
 			tmpList->device->version = recData->version;
 			tmpList->device->hardwareRevison = recData->hardwareRevison;
+			tmpList->device->annotation = recData->annotation;
 			tmpList->device->udpPort = recData->udpPort;
 			// added
 			tmpList->rpc_handle = dcerpccall->epm_response.handle;
@@ -443,7 +463,7 @@ void packet_handler_IP(u_char* param, const struct pcap_pkthdr *header, const u_
 			{
 				pcap_breakloop(adhandle);
 			}
-			t1_G = clock();
+			t1_G = get_monotonic_ms();
 			return;
 		}
 		tmpList = tmpList->next;
@@ -615,7 +635,7 @@ int captureDCPPackets(threadData_t* threadData){
 
 	/* start the capture */
 	// the second parameter is a packet count, if it is reached, loop will be terminated/ 0 or -1 equals infinity
-	t1_G = clock();
+	t1_G = get_monotonic_ms();
 	HANDLE loopBreakThread = CreateThread(NULL, 0, loopTimerThread, NULL, 0, lpExitCode);
 	if (loopBreakThread == NULL)
 	{
@@ -699,7 +719,7 @@ int captureIPPackets(threadData_t* threadData){
 
 	/* start the capture */
 	// the second parameter is a packet count, if it is reached, loop will be terminated 0 or -1 equals infinity
-	t1_G = clock();
+	t1_G = get_monotonic_ms();
 	HANDLE loopBreakThread = CreateThread(NULL, 0, loopTimerThread, NULL, 0, lpExitCode);
 
 	if (loopBreakThread == NULL)
@@ -826,6 +846,37 @@ char *removeDuplicate(char str[], int n)
 	str[i] = '\0';
 
 	return str;
+}
+
+char* extractAnnotationString(const u_char* annotation, size_t length)
+{
+	if (!annotation || length == 0) {
+		return NULL;
+	}
+
+	size_t start = 0;
+	while (start < length && annotation[start] == 0x20) {
+		start++;
+	}
+
+	size_t end = length;
+	while (end > start && annotation[end - 1] == 0x20) {
+		end--;
+	}
+
+	size_t outLen = end - start;
+	char* destination = (char*)malloc(outLen + 1);
+	if (!destination) {
+		printf("Error allocating memory for annotation string\n");
+		return NULL;
+	}
+
+	if (outLen > 0) {
+		memcpy(destination, annotation + start, outLen);
+	}
+	destination[outLen] = '\0';
+
+	return destination;
 }
 
 // extract parts from the annotation string
@@ -1196,7 +1247,7 @@ void getSubmodulPDRealData(pn_ReadImplicit* pn_readimplicit, linked_list_t* curr
 
 	}
 
-	t1_G = clock();
+	t1_G = get_monotonic_ms();
 	return;
 }
 
@@ -1287,14 +1338,13 @@ void getIMData(pn_ReadImplicit* pn_readimplicit, linked_list_t* currentDev){
 
 
 bool timeDiff(long msDiff){
-	clock_t t2;
-	//t1_G = clock();
+	uint64_t t2;
+	//t1_G = get_monotonic_ms();
 
 
-	t2 = clock();
+	t2 = get_monotonic_ms();
 
-	float diff = ((float)(t2 - t1_G) / CLOCKS_PER_SEC) * 1000;
-	if (diff > msDiff)
+	if (t2 > t1_G && (t2 - t1_G) > (uint64_t)msDiff)
 	{
 		return true;
 	}
@@ -1307,8 +1357,18 @@ bool timeDiff(long msDiff){
 DWORD WINAPI loopTimerThread(LPVOID lpParameter)
 {
 	(void)lpParameter;
+	uint64_t scanStart = get_monotonic_ms();
 	while (true)
 	{
+		if (g_scanDurationMs > 0) {
+			uint64_t baseStart = g_scanStartMs > 0 ? g_scanStartMs : scanStart;
+			uint64_t nowMs = get_monotonic_ms();
+			if (nowMs > baseStart && (nowMs - baseStart) >= (uint64_t)g_scanDurationMs) {
+				g_scanStopRequested = true;
+				pcap_breakloop(adhandle);
+				return 0;
+			}
+		}
 		if (timeDiff(TIMEOUT4))
 		{
 			pcap_breakloop(adhandle);

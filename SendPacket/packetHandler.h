@@ -14,6 +14,8 @@
 extern int netAdapterNmb;
 extern unsigned int seqNumberCounter;
 extern unsigned short identnmb;
+extern long g_scanDurationMs;
+extern bool g_scanStopRequested;
 
 extern datasheet* createDatasheet();
 
@@ -29,6 +31,9 @@ extern int sendpacket_IM(threadData_t* threadData, int deviceNumber, u_short ind
 extern bool compareMacAddress(mac_address file, mac_address packet);
 extern bool checkDevicesFullExtracted(linked_list_t* deviceList);
 
+extern uint64_t get_monotonic_ms(void);
+extern uint64_t g_scanStartMs;
+
 
 extern void stripEnter(char *s, char* rem);
 extern bool mystrcmp(char *s, char *d);
@@ -40,6 +45,7 @@ extern unsigned short calculateIPChecksum(u_char packet[]);
 extern u_short BytesTo16(unsigned char X, unsigned char Y);
 extern unsigned short calculateUDPChecksum(udp_pseudo_header udp_pHeader, u_char* packet_ip);
 extern char* cutDataFromString(u_char *annotation, int* offset, bool lastItem);
+extern char* extractAnnotationString(const u_char* annotation, size_t length);
 
 
 extern int captureDCPPackets(threadData_t* threadData);
