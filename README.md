@@ -7,11 +7,11 @@ A port of the original Windows-only [Profinet scanner by Eiwanger](https://githu
 ## Table of Contents
 - [Overview](#overview)
 - [Features](#features)
-- [Build (Linux)](#build-linux)
-- [Build (OpenWrt APK)](#build-openwrt-apk)
 - [Usage](#usage)
 - [CLI Options](#cli-options)
-- [Protocols](#protocols)
+- [Used PROFINET protocols](#used-profinet-protocols)
+- [Build (Linux)](#build-linux)
+- [Build (OpenWrt APK)](#build-openwrt-apk)
 - [Thanks](#thanks)
 
 ---
@@ -31,92 +31,6 @@ The Linux port and code migration were performed by AI (GitHub Copilot), based o
 - Automatic RPC endpoint mapper requests for discovered devices
 - Human-readable scan summary output to stdout
 - Extensive code comments for learning and reference
-
----
-
-## Build (Linux)
-
-Install prerequisites:
-
-```sh
-sudo apt install libpcap-dev
-```
-
-Configure and build:
-
-```sh
-cmake -S . -B build        # configure the project and generate build files
-cmake --build build -j     # build all targets using parallel jobs
-```
-
-The resulting binary will be in `build/SendPacket/pn_scanner`.
-
----
-
-## Build (OpenWrt APK)
-
-This repository now contains a local OpenWrt feed package in `openwrt-feed/pn-scanner/`.
-The intended workflow is to keep the package files here and let an OpenWrt buildroot
-consume them through a linked local feed configured in the OpenWrt tree.
-
-Example OpenWrt tree used during development:
-
-```sh
-~/src/openwrt
-```
-
-Create or edit `feeds.conf` in the OpenWrt tree and add a local linked feed:
-
-```sh
-cd ~/src/openwrt
-cp -n feeds.conf.default feeds.conf
-printf '\nsrc-link profinet ~/src/profinet_scanner_prototype/openwrt-feed\n' >> feeds.conf
-```
-
-Update the feed metadata and install the package into the OpenWrt package tree:
-
-```sh
-cd ~/src/openwrt
-./scripts/feeds update profinet
-./scripts/feeds install -f -p profinet pn-scanner
-```
-
-For local development builds from the current checkout, use the package-local
-source override supported by `openwrt-feed/pn-scanner/Makefile`:
-
-```sh
-cd ~/src/openwrt
-make package/feeds/profinet/pn-scanner/clean V=s
-make package/feeds/profinet/pn-scanner/compile LOCAL_SOURCE_DIR=~/src/profinet_scanner_prototype V=s
-```
-
-This compiles the package from the current repository checkout instead of downloading
-the pinned git source.
-
-For normal OpenWrt package generation, enable `pn-scanner` in `make menuconfig`
-or pass the package selection on the command line, then run the usual package build:
-
-```sh
-cd ~/src/openwrt
-make menuconfig
-
-# Network  ---> pn-scanner
-
-make package/compile V=s
-```
-
-If the package is selected in the OpenWrt configuration and `CONFIG_USE_APK=y` is enabled,
-OpenWrt will generate an `.apk` in the package output directories under `bin/packages/`.
-
-Notes:
-
-- The package definition is stored in `openwrt-feed/pn-scanner/Makefile`.
-- `LOCAL_SOURCE_DIR=~/src/profinet_scanner_prototype` is only for local development.
-  If it is omitted, OpenWrt uses the pinned upstream git source declared in the package Makefile.
-- The package builds from a dedicated `openwrt-build/` subdirectory in this repository
-  when `LOCAL_SOURCE_DIR` is active.
-- If an earlier failed `USE_SOURCE_DIR` run polluted dependency build directories, clean the
-  affected package in the OpenWrt tree before rebuilding.
 
 ---
 
@@ -219,13 +133,98 @@ Device
 
 ---
 
-## Protocols
+## Used PROFINET protocols
 - Profinet DCP (Layer 2)
 - Ethernet
 - IP
 - UDP
 - DCE/RPC (Layer 3)
 
+---
+
+## Build (Linux)
+
+Install prerequisites:
+
+```sh
+sudo apt install libpcap-dev
+```
+
+Configure and build:
+
+```sh
+cmake -S . -B build        # configure the project and generate build files
+cmake --build build -j     # build all targets using parallel jobs
+```
+
+The resulting binary will be in `build/SendPacket/pn_scanner`.
+
+---
+
+## Build (OpenWrt APK)
+
+This repository now contains a local OpenWrt feed package in `openwrt-feed/pn-scanner/`.
+The intended workflow is to keep the package files here and let an OpenWrt buildroot
+consume them through a linked local feed configured in the OpenWrt tree.
+
+Example OpenWrt tree used during development:
+
+```sh
+~/src/openwrt
+```
+
+Create or edit `feeds.conf` in the OpenWrt tree and add a local linked feed:
+
+```sh
+cd ~/src/openwrt
+cp -n feeds.conf.default feeds.conf
+printf '\nsrc-link profinet ~/src/profinet_scanner_prototype/openwrt-feed\n' >> feeds.conf
+```
+
+Update the feed metadata and install the package into the OpenWrt package tree:
+
+```sh
+cd ~/src/openwrt
+./scripts/feeds update profinet
+./scripts/feeds install -f -p profinet pn-scanner
+```
+
+For local development builds from the current checkout, use the package-local
+source override supported by `openwrt-feed/pn-scanner/Makefile`:
+
+```sh
+cd ~/src/openwrt
+make package/feeds/profinet/pn-scanner/clean V=s
+make package/feeds/profinet/pn-scanner/compile LOCAL_SOURCE_DIR=~/src/profinet_scanner_prototype V=s
+```
+
+This compiles the package from the current repository checkout instead of downloading
+the pinned git source.
+
+For normal OpenWrt package generation, enable `pn-scanner` in `make menuconfig`
+or pass the package selection on the command line, then run the usual package build:
+
+```sh
+cd ~/src/openwrt
+make menuconfig
+
+# Network  ---> pn-scanner
+
+make package/compile V=s
+```
+
+If the package is selected in the OpenWrt configuration and `CONFIG_USE_APK=y` is enabled,
+OpenWrt will generate an `.apk` in the package output directories under `bin/packages/`.
+
+Notes:
+
+- The package definition is stored in `openwrt-feed/pn-scanner/Makefile`.
+- `LOCAL_SOURCE_DIR=~/src/profinet_scanner_prototype` is only for local development.
+  If it is omitted, OpenWrt uses the pinned upstream git source declared in the package Makefile.
+- The package builds from a dedicated `openwrt-build/` subdirectory in this repository
+  when `LOCAL_SOURCE_DIR` is active.
+- If an earlier failed `USE_SOURCE_DIR` run polluted dependency build directories, clean the
+  affected package in the OpenWrt tree before rebuilding.
 
 ---
 
