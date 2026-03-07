@@ -368,7 +368,12 @@ int main(int argc, char **argv) {
 			pcap_freealldevs(threadData->alldevs);
 			free(threadData);
 			if (options.interactive) {
+				#ifdef WIN32
 				system("pause");
+				#else
+				printf("Press Enter to continue...");
+				getchar();
+				#endif
 			}
 			return -1; // false IP
 		}
@@ -378,7 +383,12 @@ int main(int argc, char **argv) {
 			pcap_freealldevs(threadData->alldevs);
 			free(threadData);
 			if (options.interactive) {
+				#ifdef WIN32
 				system("pause");
+				#else
+				printf("Press Enter to continue...");
+				getchar();
+				#endif
 			}
 			return -1;
 		}
@@ -411,7 +421,12 @@ int main(int argc, char **argv) {
 			pcap_freealldevs(threadData->alldevs);
 			free(threadData);
 			if (options.interactive) {
+				#ifdef WIN32
 				system("pause");
+				#else
+				printf("Press Enter to continue...");
+				getchar();
+				#endif
 			}
 			return -1;
 		}
@@ -670,7 +685,12 @@ finalize:
 
 	printResultsToStdout(threadData->first);
 	if (options.interactive) {
-		system("pause");
+		#ifdef WIN32
+        system("pause");
+        #else
+        printf("Press Enter to continue...");
+        getchar();
+        #endif
 	}
 
 	empty_list(threadData->first);
