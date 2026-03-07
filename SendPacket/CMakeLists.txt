@@ -22,3 +22,6 @@ target_compile_options(pn_scanner PRIVATE ${PCAP_CFLAGS_OTHER})
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(pn_scanner PRIVATE -Wall -Wextra -Wpedantic)
 endif()
+
+include(GNUInstallDirs)
+install(TARGETS pn_scanner RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
