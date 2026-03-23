@@ -1,6 +1,6 @@
-
-#include "stdafx.h"
 #include <pcap.h>
+
+#include "protocols.h"
 
 #ifndef DEVICEHANDLER_H
 #define DEVICEHANDLER_H

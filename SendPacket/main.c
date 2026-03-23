@@ -10,7 +10,14 @@
 
 
 
-#include "stdafx.h"
+#include "common.h"
+
+#include "deviceHandler.h"
+#include "filehandler.h"
+#include "linkedList.h"
+#include "packetHandler.h"
+#include "remoteScan.h"
+#include "threading.h"
 
 
 
@@ -242,7 +249,7 @@ int main(int argc, char **argv) {
 	}
 
 	// check if on windows, if so then load the npcap library
-#ifdef WIN32
+#ifdef _WIN32
 	/* Load Npcap and its functions. */
 	if (!LoadNpcapDlls()) {
 		fprintf(stderr, "Couldn't load Npcap\n");
@@ -368,7 +375,7 @@ int main(int argc, char **argv) {
 			pcap_freealldevs(threadData->alldevs);
 			free(threadData);
 			if (options.interactive) {
-				#ifdef WIN32
+				#ifdef _WIN32
 				system("pause");
 				#else
 				printf("Press Enter to continue...");
@@ -383,7 +390,7 @@ int main(int argc, char **argv) {
 			pcap_freealldevs(threadData->alldevs);
 			free(threadData);
 			if (options.interactive) {
-				#ifdef WIN32
+				#ifdef _WIN32
 				system("pause");
 				#else
 				printf("Press Enter to continue...");
@@ -421,7 +428,7 @@ int main(int argc, char **argv) {
 			pcap_freealldevs(threadData->alldevs);
 			free(threadData);
 			if (options.interactive) {
-				#ifdef WIN32
+				#ifdef _WIN32
 				system("pause");
 				#else
 				printf("Press Enter to continue...");
@@ -685,7 +692,7 @@ finalize:
 
 	printResultsToStdout(threadData->first);
 	if (options.interactive) {
-		#ifdef WIN32
+		#ifdef _WIN32
         system("pause");
         #else
         printf("Press Enter to continue...");
@@ -698,30 +705,6 @@ finalize:
 
 	return 0;
 }
-
-
-
-
-
-/*-----------------------------------------------------------------------------------------*/
-// function to load the Npcap library
-#ifdef WIN32
-BOOL LoadNpcapDlls() {
-	_TCHAR npcap_dir[512];
-	UINT len;
-	len = GetSystemDirectory(npcap_dir, 480);
-	if (!len) {
-		fprintf(stderr, "Error in GetSystemDirectory: %x", GetLastError());
-		return FALSE;
-	}
-	_tcscat_s(npcap_dir, 512, _T("\\Npcap"));
-	if (SetDllDirectory(npcap_dir) == 0) {
-		fprintf(stderr, "Error in SetDllDirectory: %x", GetLastError());
-		return FALSE;
-	}
-	return TRUE;
-}
-#endif
 
 /*-----------------------------------------------------------------------------------------*/
 // threadfuncitons for multithreading -> sniffing pn_packets (layer2)

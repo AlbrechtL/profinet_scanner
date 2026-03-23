@@ -1,8 +1,10 @@
 add_executable(pn_scanner
+    common.h
     deviceHandler.c
     fileHandler.c
     linkedList.c
     main.c
+    npcap_loader.c
     packetCapture.c
     packetHandler.c
     platform_compat.c
@@ -11,13 +13,17 @@ add_executable(pn_scanner
 
 target_include_directories(pn_scanner PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(PCAP REQUIRED libpcap)
+find_package(Threads REQUIRED)
+target_link_libraries(pn_scanner PRIVATE Threads::Threads)
 
-target_include_directories(pn_scanner PRIVATE ${PCAP_INCLUDE_DIRS})
-target_link_directories(pn_scanner PRIVATE ${PCAP_LIBRARY_DIRS})
-target_link_libraries(pn_scanner PRIVATE ${PCAP_LIBRARIES} pthread)
-target_compile_options(pn_scanner PRIVATE ${PCAP_CFLAGS_OTHER})
+if(WIN32)
+    target_link_libraries(pn_scanner PRIVATE iphlpapi ws2_32)
+else()
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(PCAP REQUIRED IMPORTED_TARGET libpcap)
+    target_link_libraries(pn_scanner PRIVATE PkgConfig::PCAP)
+    target_compile_options(pn_scanner PRIVATE ${PCAP_CFLAGS_OTHER})
+endif()
 
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(pn_scanner PRIVATE -Wall -Wextra -Wpedantic)

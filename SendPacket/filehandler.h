@@ -1,4 +1,7 @@
-#include "stdafx.h"
+#include <stdbool.h>
+#include <stdio.h>
+
+#include "protocols.h"
 
 #ifndef FILEHANDLER_H
 #define FILEHANDLER_H

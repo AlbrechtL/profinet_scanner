@@ -1,5 +1,9 @@
-//#include "stdafx.h"
+#include <stdbool.h>
+#include <stdint.h>
+
 #include <pcap.h>
+
+#include "protocols.h"
 
 #ifndef PACKETHANDLER_H
 #define PACKETHANDLER_H

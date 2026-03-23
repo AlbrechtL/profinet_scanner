@@ -1,6 +1,6 @@
 /*
 // values which aren't define shall be reserved values
-#include "stdafx.h"
+#include "protocols.h"
 
 // define Options for profinet dcp
 #define OPT_Reserved00						0x00

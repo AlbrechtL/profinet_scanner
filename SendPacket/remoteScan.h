@@ -1,5 +1,8 @@
 #include <pcap.h>
+#include <stdint.h>
+
 #include "platform_compat.h"
+#include "protocols.h"
 
 // Headerfile for the remotescan funtions
 #ifndef REMOTESCAN_H

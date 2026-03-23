@@ -1,6 +1,8 @@
-#include "stdafx.h"
+#include "common.h"
+#include "linkedList.h"
 #include "packetHandler.h"
 #include "deviceHandler.h"
+#include "threading.h"
 
 pcap_t *adhandle;
 uint64_t t1_G;

@@ -1,6 +1,6 @@
 /*
 #include <pcap.h>
-#include "stdafx.h"
+#include "protocols.h"
 
 // endstruct where all the data should be stored
 typedef struct datasheet{

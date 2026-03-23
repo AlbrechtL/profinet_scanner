@@ -1,6 +1,6 @@
-# Profinet Scanner (Linux Port)
+# Profinet Scanner
 
-A port of the original Windows-only [Profinet scanner by Eiwanger](https://github.com/Eiwanger/profinet_scanner_prototype), now compatible with Linux using CMake and libpcap.
+A CMake-based build of the original [Profinet scanner by Eiwanger](https://github.com/Eiwanger/profinet_scanner_prototype), updated to build with gcc on Windows through MSYS2 and on Linux through the usual system toolchain.
 
 ---
 
@@ -10,6 +10,7 @@ A port of the original Windows-only [Profinet scanner by Eiwanger](https://githu
 - [Usage](#usage)
 - [CLI Options](#cli-options)
 - [Used PROFINET protocols](#used-profinet-protocols)
+- [Build (Windows, MSYS2)](#build-windows-msys2)
 - [Build (Linux)](#build-linux)
 - [Build (OpenWrt APK)](#build-openwrt-apk)
 - [Thanks](#thanks)
@@ -19,9 +20,12 @@ A port of the original Windows-only [Profinet scanner by Eiwanger](https://githu
 ## Overview
 This program scans for Profinet devices in a local subnet (Layer 2) or across a range of IP addresses (Layer 3). It sends Profinet DCP calls, listens for device responses, and performs additional RPC endpoint mapper requests for each discovered device. Results are printed as a human-readable summary to stdout.
 
-Originally created as a Visual Studio Express console application for Windows, this port enables Linux compatibility and uses libpcap for packet capture.
+The repository no longer uses Visual Studio project files. Supported builds are driven through CMake:
 
-The Linux port and code migration were performed by AI (GitHub Copilot), based on the original implementation and documentation.
+- Windows: MSYS2 UCRT64 gcc, CMake, Ninja, libpcap headers, and the Npcap runtime.
+- Linux: system gcc/clang, CMake, and libpcap development headers.
+
+The code migration and build cleanup were performed by AI (GitHub Copilot), based on the original implementation and documentation.
 
 ---
 
@@ -36,10 +40,14 @@ The Linux port and code migration were performed by AI (GitHub Copilot), based o
 
 ## Usage
 
-Run the scanner from the build directory. Example:
+Run the scanner from the build directory. Example paths:
 
 ```sh
+# Linux
 ./build/SendPacket/pn_scanner
+
+# Windows PowerShell
+.\build-windows\SendPacket\pn_scanner.exe
 ```
 
 The program supports interactive mode (default) and non-interactive CLI mode.
@@ -56,6 +64,8 @@ The program supports interactive mode (default) and non-interactive CLI mode.
   ```sh
   ./build/SendPacket/pn_scanner --list-interfaces
   ```
+
+On Windows, run the same commands against `pn_scanner.exe` in the selected build directory.
 
 ---
 
@@ -139,6 +149,50 @@ Device
 - IP
 - UDP
 - DCE/RPC (Layer 3)
+
+---
+
+## Build (Windows, MSYS2)
+
+Install prerequisites:
+
+1. Install MSYS2.
+2. Open the `MSYS2 UCRT64` shell.
+3. Install the required packages:
+
+```sh
+pacman -S --needed \
+  mingw-w64-ucrt-x86_64-gcc \
+  mingw-w64-ucrt-x86_64-cmake \
+  mingw-w64-ucrt-x86_64-ninja \
+  mingw-w64-ucrt-x86_64-pkgconf \
+  mingw-w64-ucrt-x86_64-libpcap
+```
+
+4. Install Npcap on Windows.
+     The Windows executable loads Npcap's `Packet.dll` and `wpcap.dll` at runtime to enumerate interfaces and capture packets.
+
+Configure and build from the `MSYS2 UCRT64` shell:
+
+```sh
+cmake -S . -B build-windows -G Ninja
+cmake --build build-windows -j
+```
+
+The resulting binary will be in `build-windows/SendPacket/pn_scanner.exe`.
+
+Example commands:
+
+```sh
+./build-windows/SendPacket/pn_scanner.exe --help
+./build-windows/SendPacket/pn_scanner.exe --list-interfaces
+```
+
+Notes:
+
+- Use the `MSYS2 UCRT64` shell for configure and build so the correct gcc, pkg-config, and runtime DLL paths are available.
+- If `--list-interfaces` reports no suitable Ethernet interfaces, confirm that Npcap is installed and that the machine has a usable wired capture interface for the scan.
+- Windows binaries built this way depend on the MSYS2 UCRT runtime and on a local Npcap installation.
 
 ---
 
@@ -230,7 +284,7 @@ Notes:
 
 ## Thanks
 
-This port is based on the original Windows-only program by Eiwanger:
+This project is based on the original Profinet scanner by Eiwanger:
 https://github.com/Eiwanger/profinet_scanner_prototype
 
 Special thanks to Eiwanger for the original implementation and documentation.

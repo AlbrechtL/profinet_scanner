@@ -1,4 +1,5 @@
-#include "stdafx.h"
+#include "common.h"
+#include "linkedList.h"
 #include "packetHandler.h"
 #include "deviceHandler.h"
 

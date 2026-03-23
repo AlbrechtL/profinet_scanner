@@ -5,6 +5,7 @@
 /cmake_install.cmake
 /compile_commands.json
 /Makefile
+/build-windows-msys2
 
 # Generic binary/object artifacts
 *.o

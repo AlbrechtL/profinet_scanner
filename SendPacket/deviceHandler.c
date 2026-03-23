@@ -1,8 +1,8 @@
 
 
-#include "stdafx.h"
+#include "common.h"
 #include "deviceHandler.h"
-#include <pcap.h>
+#include "packetHandler.h"
 #ifndef _WIN32
 #include <arpa/inet.h>
 #include <ifaddrs.h>
@@ -206,7 +206,7 @@ char* ip6tos(struct sockaddr *sockaddr, char *address, int addrlen)
 {
 	socklen_t sockaddrlen;
 
-#ifdef WIN32
+#ifdef _WIN32
 	sockaddrlen = sizeof(struct sockaddr_in6);
 #else
 	sockaddrlen = sizeof(struct sockaddr_storage);

@@ -1,5 +1,6 @@
-#include "stdafx.h"
+#include "common.h"
 #include "filehandler.h"
+#include "packetHandler.h"
 
 fpos_t endpos;
 

@@ -10,8 +10,9 @@ extern DWORD WINAPI sniffer_thread_DCP(LPVOID lpParameter); // ->main
 extern DWORD WINAPI sniffer_thread_IP(LPVOID lpParameter); // ->main
 extern DWORD WINAPI loopTimerThread(LPVOID lpParameter); //-> packet capturer
 
-
+#ifdef _WIN32
 extern BOOL LoadNpcapDlls();
+#endif
 
 
 #endif

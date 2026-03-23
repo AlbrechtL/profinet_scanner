@@ -1,4 +1,10 @@
-#include "stdafx.h"
+#include "common.h"
+
+#include "deviceHandler.h"
+#include "linkedList.h"
+#include "packetHandler.h"
+#include "remoteScan.h"
+#include "threading.h"
 
 //u_short identnmb = 0;
 

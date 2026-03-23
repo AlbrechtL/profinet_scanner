@@ -1,4 +1,6 @@
-#include "stdafx.h"
+#include "common.h"
+
+#include "linkedList.h"
 
 unsigned int seqNumberCounter = 0;
 
