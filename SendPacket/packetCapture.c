@@ -9,6 +9,39 @@ uint64_t t1_G;
 long g_scanDurationMs = 0;
 bool g_scanStopRequested = false;
 uint64_t g_scanStartMs = 0;
+int g_scanOutputMode = 0;
+
+static int shouldPrintDcpTraffic(void)
+{
+	return g_scanOutputMode == 0;
+}
+
+static int shouldPrintRpcTraffic(void)
+{
+	return g_scanOutputMode == 1;
+}
+
+static int getEtherTypePayloadOffset(const u_char* pkt_data, bpf_u_int32 caplen, u_short* etherType)
+{
+	int offset = 12;
+	u_short currentType;
+
+	if (!pkt_data || caplen < 14 || !etherType) {
+		return -1;
+	}
+
+	currentType = (u_short)((pkt_data[offset] << 8) | pkt_data[offset + 1]);
+	offset += 2;
+
+	while ((currentType == 0x8100 || currentType == 0x88A8) && caplen >= (bpf_u_int32)(offset + 4)) {
+		offset += 2;
+		currentType = (u_short)((pkt_data[offset] << 8) | pkt_data[offset + 1]);
+		offset += 2;
+	}
+
+	*etherType = currentType;
+	return offset;
+}
 
 uint64_t get_monotonic_ms(void)
 {
@@ -25,21 +58,10 @@ uint64_t get_monotonic_ms(void)
 
 static int getPndcpOffset(const u_char* pkt_data, bpf_u_int32 caplen)
 {
-	if (!pkt_data || caplen < 14) {
-		return -1;
-	}
+	u_short etherType = 0;
+	int offset = getEtherTypePayloadOffset(pkt_data, caplen, &etherType);
 
-	int offset = 12;
-	u_short etherType = (u_short)((pkt_data[offset] << 8) | pkt_data[offset + 1]);
-	offset += 2;
-
-	while ((etherType == 0x8100 || etherType == 0x88A8) && caplen >= (bpf_u_int32)(offset + 4)) {
-		offset += 2;
-		etherType = (u_short)((pkt_data[offset] << 8) | pkt_data[offset + 1]);
-		offset += 2;
-	}
-
-	if (etherType != 0x8892) {
+	if (offset < 0 || etherType != 0x8892) {
 		return -1;
 	}
 
@@ -247,30 +269,31 @@ void packet_handler_dcp(u_char* param, const struct pcap_pkthdr *header, const u
 
 	strftime(timestr, sizeof timestr, "%H:%M:%S", &ltime);
 
-	//print timestamp and length of the packet 
-	printf("%s.%06ld len:%d  %02x:%02x:%02x:%02x:%02x:%02x\n", timestr, (long)header->ts.tv_usec, header->len,
-		ethh->src_addrK.byte1, ethh->src_addrK.byte2, ethh->src_addrK.byte3, ethh->src_addrK.byte4, ethh->src_addrK.byte5, ethh->src_addrK.byte6);
+	if (shouldPrintDcpTraffic()) {
+		printf("%s.%06ld len:%d  %02x:%02x:%02x:%02x:%02x:%02x\n", timestr, (long)header->ts.tv_usec, header->len,
+			ethh->src_addrK.byte1, ethh->src_addrK.byte2, ethh->src_addrK.byte3, ethh->src_addrK.byte4, ethh->src_addrK.byte5, ethh->src_addrK.byte6);
 
-	if (hasIpParameter) {
-		printf("  DCP IP: %d.%d.%d.%d\n",
-			recData->deviceIp.byte1,
-			recData->deviceIp.byte2,
-			recData->deviceIp.byte3,
-			recData->deviceIp.byte4);
-	}
-	else {
-		printf("  DCP IP: <not present>\n");
-	}
+		if (hasIpParameter) {
+			printf("  DCP IP: %d.%d.%d.%d\n",
+				recData->deviceIp.byte1,
+				recData->deviceIp.byte2,
+				recData->deviceIp.byte3,
+				recData->deviceIp.byte4);
+		}
+		else {
+			printf("  DCP IP: <not present>\n");
+		}
 
-	printf("  DCP NameOfStation: %s\n", hasNameOfStation && recData->nameOfStation ? recData->nameOfStation : "<not present>");
-	printf("  DCP DeviceVendorValue: %s\n", hasDeviceVendorValue && recData->deviceType ? recData->deviceType : "<not present>");
-	if (hasDeviceId) {
-		printf("  DCP VendorID: 0x%04x\n", recData->vendorId);
-		printf("  DCP DeviceID: 0x%04x\n", recData->deviceId);
-	}
-	else {
-		printf("  DCP VendorID: <not present>\n");
-		printf("  DCP DeviceID: <not present>\n");
+		printf("  DCP NameOfStation: %s\n", hasNameOfStation && recData->nameOfStation ? recData->nameOfStation : "<not present>");
+		printf("  DCP DeviceVendorValue: %s\n", hasDeviceVendorValue && recData->deviceType ? recData->deviceType : "<not present>");
+		if (hasDeviceId) {
+			printf("  DCP VendorID: 0x%04x\n", recData->vendorId);
+			printf("  DCP DeviceID: 0x%04x\n", recData->deviceId);
+		}
+		else {
+			printf("  DCP VendorID: <not present>\n");
+			printf("  DCP DeviceID: <not present>\n");
+		}
 	}
 
 	// check first, if it is NULL malloc the first box
@@ -415,8 +438,9 @@ void packet_handler_IP(u_char* param, const struct pcap_pkthdr *header, const u_
 
 	strftime(timestr, sizeof timestr, "%H:%M:%S", &ltime);
 
-	//print timestamp and length of the packet
-	printf("%s.%06ld len:%d  %d.%d.%d.%d\n", timestr, (long)header->ts.tv_usec, header->len, ih->saddr.byte1, ih->saddr.byte2, ih->saddr.byte3, ih->saddr.byte4);
+	if (shouldPrintRpcTraffic()) {
+		printf("%s.%06ld len:%d  %d.%d.%d.%d\n", timestr, (long)header->ts.tv_usec, header->len, ih->saddr.byte1, ih->saddr.byte2, ih->saddr.byte3, ih->saddr.byte4);
+	}
 
 	// check first, if it is NULL malloc the first box
 	linked_list_t* tmpList = threadData->first;
@@ -524,8 +548,9 @@ void packet_handler_ImplicitRead(threadData_t* threadData, const struct pcap_pkt
 	/* convert the timestamp to readable format */
 	strftime(timestr, sizeof timestr, "%H:%M:%S", &ltime);
 
-	//print timestamp and length of the packet
-	printf("%s.%06ld len:%d  %d.%d.%d.%d\n", timestr, (long)header->ts.tv_usec, header->len, ih->saddr.byte1, ih->saddr.byte2, ih->saddr.byte3, ih->saddr.byte4);
+	if (shouldPrintRpcTraffic()) {
+		printf("%s.%06ld len:%d  %d.%d.%d.%d\n", timestr, (long)header->ts.tv_usec, header->len, ih->saddr.byte1, ih->saddr.byte2, ih->saddr.byte3, ih->saddr.byte4);
+	}
 
 	if (pn_readimplicit->errorDecode == 0x80) // error decode PNIORW
 		return;
@@ -596,7 +621,10 @@ int captureDCPPackets(threadData_t* threadData){
 		errbuf		// error buffer
 		)) == NULL)
 	{
-		fprintf(stderr, "\nUnable to open the adapter. %s is not supported by Npcap\n", d->name);
+		fprintf(stderr, "\nUnable to open the adapter '%s'. pcap error: %s\n", d->name, errbuf);
+#ifndef _WIN32
+		fprintf(stderr, "Packet capture on Linux usually requires elevated privileges. Try running with doas.\n");
+#endif
 		return -1;
 	}
 
@@ -630,7 +658,9 @@ int captureDCPPackets(threadData_t* threadData){
 		return -1;
 	}
 
-	printf_s("\nlistening on %s for pn_dcp...\n", d->description ? d->description : d->name);
+	if (shouldPrintDcpTraffic()) {
+		printf_s("\nlistening on %s for pn_dcp...\n", d->description ? d->description : d->name);
+	}
 
 
 	/* Retrieve the packets */
@@ -682,7 +712,10 @@ int captureIPPackets(threadData_t* threadData){
 		errbuf		// error buffer
 		)) == NULL)
 	{
-		fprintf(stderr, "\nUnable to open the adapter. %s is not supported by Npcap\n", d->name);
+		fprintf(stderr, "\nUnable to open the adapter '%s'. pcap error: %s\n", d->name, errbuf);
+#ifndef _WIN32
+		fprintf(stderr, "Packet capture on Linux usually requires elevated privileges. Try running with doas.\n");
+#endif
 		return -1;
 	}
 
@@ -716,7 +749,9 @@ int captureIPPackets(threadData_t* threadData){
 		return -1;
 	}
 
-	printf_s("\nlistening on %s for IP/RPC...\n", d->description ? d->description : d->name);
+	if (shouldPrintRpcTraffic()) {
+		printf_s("\nlistening on %s for IP/RPC...\n", d->description ? d->description : d->name);
+	}
 
 
 	/* start the capture */

@@ -1203,8 +1203,9 @@ void packet_handler_IP_rem(u_char* param, const struct pcap_pkthdr *header, cons
 	/* convert the timestamp to readable format */
 	strftime(timestr, sizeof timestr, "%H:%M:%S", &ltime);
 
-	//print timestamp and length of the packet
-	printf("%s.%06ld len:%d  %d.%d.%d.%d\n", timestr, (long)header->ts.tv_usec, header->len, ih->saddr.byte1, ih->saddr.byte2, ih->saddr.byte3, ih->saddr.byte4);
+	if (g_scanOutputMode == 1) {
+		printf("%s.%06ld len:%d  %d.%d.%d.%d\n", timestr, (long)header->ts.tv_usec, header->len, ih->saddr.byte1, ih->saddr.byte2, ih->saddr.byte3, ih->saddr.byte4);
+	}
 
 
 	// check first, if it is NULL malloc the first box
@@ -1312,7 +1313,10 @@ int captureIPPackets_rem(threadData_t* threadData){
 		errbuf		// error buffer
 		)) == NULL)
 	{
-		fprintf(stderr, "\nUnable to open the adapter. %s is not supported by Npcap\n", d->name);
+		fprintf(stderr, "\nUnable to open the adapter '%s'. pcap error: %s\n", d->name, errbuf);
+#ifndef _WIN32
+		fprintf(stderr, "Packet capture on Linux usually requires elevated privileges. Try running with doas.\n");
+#endif
 		return -1;
 	}
 
@@ -1346,7 +1350,9 @@ int captureIPPackets_rem(threadData_t* threadData){
 		return -1;
 	}
 
-	printf_s("\nlistening on %s for IP/RPC...\n", d->description ? d->description : d->name);
+	if (g_scanOutputMode == 1) {
+		printf_s("\nlistening on %s for IP/RPC...\n", d->description ? d->description : d->name);
+	}
 
 
 	// start the capture

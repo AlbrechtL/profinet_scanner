@@ -32,6 +32,7 @@ The code migration and build cleanup were performed by AI (GitHub Copilot), base
 ## Features
 - Layer 2 scan: Profinet DCP call in local subnet
 - Layer 3 scan: IP range scan with detailed device info
+- Topology scan: PROFINET RPC peer-link resolution on the selected interface
 - Automatic RPC endpoint mapper requests for discovered devices
 - Human-readable scan summary output to stdout
 - Extensive code comments for learning and reference
@@ -81,8 +82,14 @@ On Windows, run the same commands against `pn_scanner.exe` in the selected build
 --interface <index|name>
 	Select interface by 1-based index (from --list-interfaces) or interface name.
 
---mode <local|remote>
-    Select scan mode: local uses PROFINET DCP (Layer 2) and remote uses DCE/RPC (Layer 3).
+--mode <local|remote|topology>
+  Select scan mode: local uses PROFINET DCP (Layer 2), remote uses DCE/RPC (Layer 3),
+  and topology combines PROFINET DCP with RPC-based per-port peer data.
+
+  Output behavior:
+  - local prints DCP discovery output and the final device summary.
+  - remote prints RPC discovery output and the final device summary.
+  - topology suppresses DCP/RPC chatter and prints only the final topology summary.
 
 --target <a.b.c.d[-e]>
 	Remote target IP or range. Required when --mode remote is used.
@@ -101,8 +108,11 @@ Examples:
 # Local (DCP) scan (non-interactive)
 ./build/SendPacket/pn_scanner --interface 1 --mode local
 
+# Topology scan on the selected Ethernet interface
+doas ./build/SendPacket/pn_scanner --interface eth0 --mode topology --duration 60
+
 # Real world example
-sudo ./build/SendPacket/pn_scanner --interface enp0s31f6 --mode local
+doas ./build/SendPacket/pn_scanner --interface enp0s31f6 --mode local
 Send pn_dcp 
 
 listening on enp0s31f6 for pn_dcp...
@@ -139,6 +149,15 @@ Device
   Vendor ID: 0x0000
   Device ID: 0x0000
   UDP Port: 34964
+
+# Remote scan (DCE/RPC) (non-interactive)
+./build/SendPacket/pn_scanner --interface eth0 --mode topology
+Topology results (stdout):
+
+Topology source: PROFINET RPC peer data.
+
+Topology chain:
+  testxasensorf28b --[port-001 <-> port-009]-- ie-sw-al24m-16gt-8gesfp --[port-011 <-> port-001]-- desktop-sj9ndpi
 ```
 
 ---
@@ -201,7 +220,11 @@ Notes:
 Install prerequisites:
 
 ```sh
-sudo apt install libpcap-dev
+# Alpine Linux
+doas apk add build-base cmake libpcap-dev
+
+# Debian/Ubuntu
+doas apt install libpcap-dev
 ```
 
 Configure and build:
@@ -212,6 +235,12 @@ cmake --build build -j     # build all targets using parallel jobs
 ```
 
 The resulting binary will be in `build/SendPacket/pn_scanner`.
+
+Topology note:
+
+- Topology mode currently relies on PROFINET RPC peer data gathered during the follow-up RPC phases.
+- The initial DCP pass discovers reachable devices, and the later RPC reads extract local port IDs, peer MAC addresses, peer chassis IDs, and peer port IDs where the device supports them.
+- A topology link can only be shown if the device exposes this peer data through the PROFINET RPC reads.
 
 ---
 

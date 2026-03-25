@@ -38,20 +38,412 @@ typedef struct cli_options {
 	char targetValue[32];
 } cli_options_t;
 
+static int shouldPrintDcpOutput(int mode)
+{
+	return mode == 0;
+}
+
+static int shouldPrintRpcOutput(int mode)
+{
+	return mode == 1;
+}
+
+static int shouldPrintTopologyOutput(int mode)
+{
+	return mode == 2;
+}
+
+typedef struct topology_edge {
+	const char* leftLabel;
+	const char* rightLabel;
+	const char* leftPort;
+	const char* rightPort;
+	mac_address leftMac;
+	mac_address rightMac;
+} topology_edge_t;
+
+typedef struct topology_node {
+	const char* label;
+	mac_address mac;
+	int degree;
+} topology_node_t;
+
+static void formatMacAddress(mac_address mac, char* buffer, size_t bufferSize)
+{
+	if (!buffer || bufferSize == 0) {
+		return;
+	}
+
+	snprintf(buffer, bufferSize, "%02x:%02x:%02x:%02x:%02x:%02x",
+		mac.byte1 & 0xFF,
+		mac.byte2 & 0xFF,
+		mac.byte3 & 0xFF,
+		mac.byte4 & 0xFF,
+		mac.byte5 & 0xFF,
+		mac.byte6 & 0xFF);
+}
+
+static linked_list_t* findDeviceByMac(linked_list_t* list, mac_address mac)
+{
+	for (linked_list_t* current = list; current != NULL; current = current->next) {
+		if (current->device && compareMacAddress(current->device->deviceMACaddress, mac)) {
+			return current;
+		}
+	}
+
+	return NULL;
+}
+
+static const char* getDeviceLabel(const datasheet* device, char* fallbackBuffer, size_t fallbackBufferSize)
+{
+	if (!device) {
+		return "unknown device";
+	}
+
+	if (device->nameOfStation && device->nameOfStation[0] != '\0') {
+		return device->nameOfStation;
+	}
+
+	if (device->deviceType && device->deviceType[0] != '\0') {
+		return device->deviceType;
+	}
+
+	formatMacAddress(device->deviceMACaddress, fallbackBuffer, fallbackBufferSize);
+	return fallbackBuffer;
+}
+
+static int sameMacAddress(mac_address left, mac_address right)
+{
+	return compareMacAddress(left, right);
+}
+
+static int sameOptionalPort(const char* left, const char* right)
+{
+	if (!left && !right) {
+		return 1;
+	}
+
+	if (!left || !right) {
+		return 0;
+	}
+
+	return strcmp(left, right) == 0;
+}
+
+static int edgeMatches(const topology_edge_t* edge,
+	mac_address leftMac,
+	const char* leftPort,
+	mac_address rightMac,
+	const char* rightPort)
+{
+	if (!edge) {
+		return 0;
+	}
+
+	if (sameMacAddress(edge->leftMac, leftMac) &&
+		sameMacAddress(edge->rightMac, rightMac) &&
+		sameOptionalPort(edge->leftPort, leftPort) &&
+		sameOptionalPort(edge->rightPort, rightPort)) {
+		return 1;
+	}
+
+	if (sameMacAddress(edge->leftMac, rightMac) &&
+		sameMacAddress(edge->rightMac, leftMac) &&
+		sameOptionalPort(edge->leftPort, rightPort) &&
+		sameOptionalPort(edge->rightPort, leftPort)) {
+		return 1;
+	}
+
+	return 0;
+}
+
+static int appendTopologyEdge(topology_edge_t* edges,
+	int edgeCapacity,
+	int edgeCount,
+	const char* leftLabel,
+	const char* rightLabel,
+	const char* leftPort,
+	const char* rightPort,
+	mac_address leftMac,
+	mac_address rightMac)
+{
+	if (edgeCount >= edgeCapacity) {
+		return edgeCount;
+	}
+
+	for (int index = 0; index < edgeCount; index++) {
+		if (edgeMatches(&edges[index], leftMac, leftPort, rightMac, rightPort)) {
+			return edgeCount;
+		}
+	}
+
+	edges[edgeCount].leftLabel = leftLabel;
+	edges[edgeCount].rightLabel = rightLabel;
+	edges[edgeCount].leftPort = leftPort;
+	edges[edgeCount].rightPort = rightPort;
+	edges[edgeCount].leftMac = leftMac;
+	edges[edgeCount].rightMac = rightMac;
+	return edgeCount + 1;
+}
+
+static int findTopologyNodeIndex(const topology_node_t* nodes, int nodeCount, mac_address mac)
+{
+	for (int index = 0; index < nodeCount; index++) {
+		if (sameMacAddress(nodes[index].mac, mac)) {
+			return index;
+		}
+	}
+
+	return -1;
+}
+
+static int appendTopologyNode(topology_node_t* nodes,
+	int nodeCapacity,
+	int nodeCount,
+	const char* label,
+	mac_address mac)
+{
+	int existingIndex = findTopologyNodeIndex(nodes, nodeCount, mac);
+	if (existingIndex >= 0) {
+		return nodeCount;
+	}
+
+	if (nodeCount >= nodeCapacity) {
+		return nodeCount;
+	}
+
+	nodes[nodeCount].label = label;
+	nodes[nodeCount].mac = mac;
+	nodes[nodeCount].degree = 0;
+	return nodeCount + 1;
+}
+
+static int findEdgeForNode(const topology_edge_t* edges, int edgeCount, int nodeIndex, const topology_node_t* nodes, const int* visited)
+{
+	for (int edgeIndex = 0; edgeIndex < edgeCount; edgeIndex++) {
+		if (visited[edgeIndex]) {
+			continue;
+		}
+
+		if (sameMacAddress(edges[edgeIndex].leftMac, nodes[nodeIndex].mac) ||
+			sameMacAddress(edges[edgeIndex].rightMac, nodes[nodeIndex].mac)) {
+			return edgeIndex;
+		}
+	}
+
+	return -1;
+}
+
+static void printTopologyEdgeList(const topology_edge_t* edges, int edgeCount)
+{
+	printf("Topology links:\n");
+	for (int index = 0; index < edgeCount; index++) {
+		printf("  %s", edges[index].leftLabel);
+		if (edges[index].leftPort) {
+			printf(" [%s]", edges[index].leftPort);
+		}
+		printf(" <-> %s", edges[index].rightLabel);
+		if (edges[index].rightPort) {
+			printf(" [%s]", edges[index].rightPort);
+		}
+		printf("\n");
+	}
+	printf("\n");
+}
+
+static void printResolvedTopology(const threadData_t* threadData)
+{
+	int deviceCount;
+	int edgeCount = 0;
+	int nodeCount = 0;
+	topology_edge_t* edges;
+	topology_node_t* nodes;
+	int* visited;
+	int startIndex = -1;
+	int currentNodeIndex;
+	int printedEdges = 0;
+
+	if (!threadData || !threadData->first) {
+		printf("No topology links resolved.\n\n");
+		return;
+	}
+
+	deviceCount = linkedlist_status(threadData->first);
+	if (deviceCount <= 0) {
+		printf("No topology links resolved.\n\n");
+		return;
+	}
+
+	edges = calloc((size_t)(deviceCount * 8), sizeof(topology_edge_t));
+	nodes = calloc((size_t)(deviceCount * 2), sizeof(topology_node_t));
+	visited = calloc((size_t)(deviceCount * 8), sizeof(int));
+	if (!edges || !nodes || !visited) {
+		printf("No topology links resolved.\n\n");
+		free(edges);
+		free(nodes);
+		free(visited);
+		return;
+	}
+
+	for (linked_list_t* current = threadData->first; current != NULL; current = current->next) {
+		linkedList_slot* slot;
+		char deviceFallback[18];
+
+		if (!current->device) {
+			continue;
+		}
+
+		for (slot = current->device->slotList; slot != NULL; slot = slot->next) {
+			for (linkedList_subslot* subslot = slot->subslotList; subslot != NULL; subslot = subslot->next) {
+				if (!subslot->ownPortID || !subslot->peerMacAddress) {
+					continue;
+				}
+
+				linked_list_t* peerDevice = findDeviceByMac(threadData->first, *subslot->peerMacAddress);
+				char peerFallback[18];
+				char peerMacString[18];
+				const char* peerLabel;
+				const char* leftLabel = getDeviceLabel(current->device, deviceFallback, sizeof(deviceFallback));
+				const char* peerPort = NULL;
+
+				formatMacAddress(*subslot->peerMacAddress, peerMacString, sizeof(peerMacString));
+
+				if (peerDevice && peerDevice->device) {
+					peerLabel = getDeviceLabel(peerDevice->device, peerFallback, sizeof(peerFallback));
+				} else if (subslot->peerChassisID && subslot->peerChassisID[0] != '\0') {
+					peerLabel = (char*)subslot->peerChassisID;
+				} else {
+					peerLabel = peerMacString;
+				}
+
+				if (subslot->peerPortID && subslot->peerPortID[0] != '\0') {
+					peerPort = (char*)subslot->peerPortID;
+				}
+
+				edgeCount = appendTopologyEdge(edges,
+					deviceCount * 8,
+					edgeCount,
+					leftLabel,
+					peerLabel,
+					(char*)subslot->ownPortID,
+					peerPort,
+					current->device->deviceMACaddress,
+					*subslot->peerMacAddress);
+
+				nodeCount = appendTopologyNode(nodes,
+					deviceCount * 2,
+					nodeCount,
+					leftLabel,
+					current->device->deviceMACaddress);
+				nodeCount = appendTopologyNode(nodes,
+					deviceCount * 2,
+					nodeCount,
+					peerLabel,
+					*subslot->peerMacAddress);
+			}
+		}
+	}
+
+	if (edgeCount == 0) {
+		printf("  No port-to-port links could be resolved from the current scan.\n");
+		printf("\n");
+		free(edges);
+		free(nodes);
+		free(visited);
+		return;
+	}
+
+	for (int edgeIndex = 0; edgeIndex < edgeCount; edgeIndex++) {
+		int leftIndex = findTopologyNodeIndex(nodes, nodeCount, edges[edgeIndex].leftMac);
+		int rightIndex = findTopologyNodeIndex(nodes, nodeCount, edges[edgeIndex].rightMac);
+		if (leftIndex >= 0) {
+			nodes[leftIndex].degree++;
+		}
+		if (rightIndex >= 0) {
+			nodes[rightIndex].degree++;
+		}
+	}
+
+	for (int nodeIndex = 0; nodeIndex < nodeCount; nodeIndex++) {
+		if (nodes[nodeIndex].degree == 1) {
+			startIndex = nodeIndex;
+			break;
+		}
+	}
+
+	if (startIndex < 0) {
+		printTopologyEdgeList(edges, edgeCount);
+		free(edges);
+		free(nodes);
+		free(visited);
+		return;
+	}
+
+	currentNodeIndex = startIndex;
+	printf("Topology chain:\n  %s", nodes[currentNodeIndex].label);
+	while (printedEdges < edgeCount) {
+		int edgeIndex = findEdgeForNode(edges, edgeCount, currentNodeIndex, nodes, visited);
+		int nextNodeIndex;
+		const char* currentPort;
+		const char* nextPort;
+
+		if (edgeIndex < 0) {
+			break;
+		}
+
+		visited[edgeIndex] = 1;
+		printedEdges++;
+
+		if (sameMacAddress(edges[edgeIndex].leftMac, nodes[currentNodeIndex].mac)) {
+			nextNodeIndex = findTopologyNodeIndex(nodes, nodeCount, edges[edgeIndex].rightMac);
+			currentPort = edges[edgeIndex].leftPort;
+			nextPort = edges[edgeIndex].rightPort;
+		} else {
+			nextNodeIndex = findTopologyNodeIndex(nodes, nodeCount, edges[edgeIndex].leftMac);
+			currentPort = edges[edgeIndex].rightPort;
+			nextPort = edges[edgeIndex].leftPort;
+		}
+
+		printf(" --[%s <-> %s]-- %s",
+			currentPort ? currentPort : "?",
+			nextPort ? nextPort : "?",
+			nextNodeIndex >= 0 ? nodes[nextNodeIndex].label : "unknown device");
+
+		if (nextNodeIndex < 0) {
+			break;
+		}
+
+		currentNodeIndex = nextNodeIndex;
+	}
+	printf("\n");
+	printf("\n");
+
+	free(edges);
+	free(nodes);
+	free(visited);
+}
+
+static void printTopologyToStdout(const threadData_t* threadData)
+{
+	printf("\nTopology results (stdout):\n\n");
+	printf("Topology source: PROFINET RPC peer data.\n\n");
+	printResolvedTopology(threadData);
+}
+
 static void printHelp(const char* programName)
 {
 	printf("Usage:\n");
 	printf("  %s --help\n", programName);
 	printf("  %s --list-interfaces\n", programName);
-	printf("  %s --interface <index|name> --mode <local|remote> [--target <a.b.c.d[-e]>]\n", programName);
-	printf("  %s --interface <index|name> --mode <local|remote> [--target <a.b.c.d[-e]>] [--duration <seconds>]\n", programName);
+	printf("  %s --interface <index|name> --mode <local|remote|topology> [--target <a.b.c.d[-e]>]\n", programName);
+	printf("  %s --interface <index|name> --mode <local|remote|topology> [--target <a.b.c.d[-e]>] [--duration <seconds>]\n", programName);
 	printf("  %s --interactive\n\n", programName);
 
 	printf("Options:\n");
 	printf("  --help               Show this help message and exit.\n");
 	printf("  --list-interfaces    List available capture interfaces and exit.\n");
 	printf("  --interface VALUE    Interface index (1-based) or interface name from --list-interfaces.\n");
-	printf("  --mode VALUE         Scan mode: local (DCP) or remote (DCE/RPC).\n");
+	printf("  --mode VALUE         Scan mode: local (DCP), remote (DCE/RPC), or topology (DCP + RPC peer links).\n");
 	printf("  --target VALUE       Remote target IP or range in the form a.b.c.d or a.b.c.d-e.\n");
 	printf("                       Required when --mode remote is used.\n");
 	printf("  --duration SECONDS   Stop capture after the given number of seconds.\n");
@@ -61,6 +453,7 @@ static void printHelp(const char* programName)
 	printf("  %s --list-interfaces\n", programName);
 	printf("  %s --interface 1 --mode local\n", programName);
 	printf("  %s --interface eth0 --mode remote --target 192.168.0.10-20\n", programName);
+	printf("  %s --interface eth0 --mode topology --duration 10\n", programName);
 	printf("  %s --interface eth0 --mode remote --target 192.168.0.10 --duration 10\n", programName);
 }
 
@@ -195,8 +588,10 @@ int main(int argc, char **argv) {
 				options.mode = 0;
 			} else if (strcmp(modeArg, "remote") == 0) {
 				options.mode = 1;
+			} else if (strcmp(modeArg, "topology") == 0) {
+				options.mode = 2;
 			} else {
-				printf("Invalid --mode value: %s (use local or remote)\n", modeArg);
+				printf("Invalid --mode value: %s (use local, remote, or topology)\n", modeArg);
 				return -1;
 			}
 			options.hasMode = true;
@@ -333,7 +728,7 @@ int main(int argc, char **argv) {
 	if (options.hasMode) {
 		mode = options.mode;
 	} else if (options.interactive) {
-		printf("\nScan local (0) or remote (1): \n");
+		printf("\nScan local (0), remote (1), or topology (2): \n");
 		scanf_s("%d", &mode);
 		getchar(); // flush buffer
 	} else {
@@ -343,13 +738,15 @@ int main(int argc, char **argv) {
 		return -1;
 	}
 
-	if (mode != 0 && mode != 1)
+	if (mode != 0 && mode != 1 && mode != 2)
 	{
-		printf("Invalid mode value. Use 0/1 in interactive mode or --mode local|remote in CLI mode.\n");
+		printf("Invalid mode value. Use 0/1/2 in interactive mode or --mode local|remote|topology in CLI mode.\n");
 		pcap_freealldevs(threadData->alldevs);
 		free(threadData);
 		return -1;
 	}
+
+	g_scanOutputMode = mode;
 
 
 	if (mode == 1)
@@ -406,7 +803,9 @@ int main(int argc, char **argv) {
 
 		HANDLE sniffThreadrem = CreateThread(NULL, 0, sniffer_thread_remote, threadData, 0, lpExitCode);
 
-		printf_s("\nSend RPC lookup endpointmapper first call \n");
+		if (shouldPrintRpcOutput(mode)) {
+			printf_s("\nSend RPC lookup endpointmapper first call \n");
+		}
 		for (l = 0; l <= range; l++)
 		{
 			threadData->numberOfIPDev = l;
@@ -437,8 +836,10 @@ int main(int argc, char **argv) {
 			}
 			return -1;
 		}
-		printf_s("\nRPC lookup first call finished \n\n");
-		printf_s("\nSend RPC lookup endpointmapper second call \n");
+		if (shouldPrintRpcOutput(mode)) {
+			printf_s("\nRPC lookup first call finished \n\n");
+			printf_s("\nSend RPC lookup endpointmapper second call \n");
+		}
 		sniffThreadrem = CreateThread(NULL, 0, sniffer_thread_remote, threadData, 0, lpExitCode);
 
 
@@ -454,9 +855,10 @@ int main(int argc, char **argv) {
 		}
 
 
-		printf_s("\nRPC lookup second call finished \n\n");
-
-		printf_s("\nSend RPC implicit read PDRealData \n");
+		if (shouldPrintRpcOutput(mode)) {
+			printf_s("\nRPC lookup second call finished \n\n");
+			printf_s("\nSend RPC implicit read PDRealData \n");
+		}
 		sniffThreadrem = CreateThread(NULL, 0, sniffer_thread_remote, threadData, 0, lpExitCode);
 
 		for (int k = 0; k < defcount; k++){
@@ -471,9 +873,10 @@ int main(int argc, char **argv) {
 		}
 
 
-		printf_s("\nPDRealData call finished \n\n");
-
-		printf_s("\nSend RPC implicit read realidentificationdata \n");
+		if (shouldPrintRpcOutput(mode)) {
+			printf_s("\nPDRealData call finished \n\n");
+			printf_s("\nSend RPC implicit read realidentificationdata \n");
+		}
 		sniffThreadrem = CreateThread(NULL, 0, sniffer_thread_remote, threadData, 0, lpExitCode);
 		for (int k = 0; k < defcount; k++){
 			threadData->numberOfIPDev = k;
@@ -486,14 +889,18 @@ int main(int argc, char **argv) {
 			goto finalize;
 		}
 
-		printf_s("\nRealIdentificationData call finished \n\n");
+		if (shouldPrintRpcOutput(mode)) {
+			printf_s("\nRealIdentificationData call finished \n\n");
+		}
 
 
 		// send a request for each slot and subslot to get the data out of them
 		sniffThreadrem = CreateThread(NULL, 0, sniffer_thread_remote, threadData, 0, lpExitCode);
 		linked_list_t* list = threadData->first;
 		slotParameter slotpara;
-		printf_s("\nSend RPC implicit read PDRealData for one subslot \n");
+		if (shouldPrintRpcOutput(mode)) {
+			printf_s("\nSend RPC implicit read PDRealData for one subslot \n");
+		}
 
 		for (int k = 0; k < defcount; k++, list = list->next){
 			linkedList_slot* slot = list->device->slotList;
@@ -519,9 +926,13 @@ int main(int argc, char **argv) {
 			printf_s("\nScan duration reached; stopping early.\n");
 			goto finalize;
 		}
-		printf_s("\nPDRealData for each subslot call finished \n\n");
+		if (shouldPrintRpcOutput(mode)) {
+			printf_s("\nPDRealData for each subslot call finished \n\n");
+		}
 
-		printf_s("\nSend RPC implicit read I&M data for each module \n");
+		if (shouldPrintRpcOutput(mode)) {
+			printf_s("\nSend RPC implicit read I&M data for each module \n");
+		}
 		slotpara.posSubslot = -1; // set to non reachable value
 		sniffThreadrem = CreateThread(NULL, 0, sniffer_thread_remote, threadData, 0, lpExitCode);
 		list = threadData->first;
@@ -544,7 +955,9 @@ int main(int argc, char **argv) {
 			goto finalize;
 		}
 
-		printf_s("\nI&M data call for each module finished \n\n");
+		if (shouldPrintRpcOutput(mode)) {
+			printf_s("\nI&M data call for each module finished \n\n");
+		}
 
 	}
 	else
@@ -553,7 +966,9 @@ int main(int argc, char **argv) {
 		HANDLE sniffThread = CreateThread(NULL, 0, sniffer_thread_DCP, threadData, 0, lpExitCode);
 
 
-		printf_s("\nSend pn_dcp \n");
+		if (shouldPrintDcpOutput(mode)) {
+			printf_s("\nSend pn_dcp \n");
+		}
 		sendPacket_DCP(threadData);
 
 		WaitForSingleObject(sniffThread, INFINITE);
@@ -562,7 +977,9 @@ int main(int argc, char **argv) {
 			goto finalize;
 		}
 		// every time a packet is recieved the timer of pcap_next_ex is restored to TIMEOUT seconds, if the TIMEOUT seconds are over the function returns 0
-		printf_s("\npn_dcp finished\n\n");
+		if (shouldPrintDcpOutput(mode)) {
+			printf_s("\npn_dcp finished\n\n");
+		}
 		// so far so good it works
 
 		sniffThread = CreateThread(NULL, 0, sniffer_thread_IP, threadData, 0, lpExitCode);
@@ -579,7 +996,9 @@ int main(int argc, char **argv) {
 		}
 
 		// for each device in the linkedlist send a rpc call
-		printf_s("\nSend RPC lookup endpointmapper first call\n");
+		if (shouldPrintRpcOutput(mode)) {
+			printf_s("\nSend RPC lookup endpointmapper first call\n");
+		}
 
 		for (int k = 0; k < deviceCount; k++){
 			threadData->numberOfIPDev = k;
@@ -592,11 +1011,15 @@ int main(int argc, char **argv) {
 			goto finalize;
 		}
 
-		printf_s("\nRPC lookup first call finished \n\n");
+		if (shouldPrintRpcOutput(mode)) {
+			printf_s("\nRPC lookup first call finished \n\n");
+		}
 
 		// again sniff against IP-RPC
 		// this time the intern break should stop the loop
-		printf_s("\nSend RPC lookup endpointmapper second call \n");
+		if (shouldPrintRpcOutput(mode)) {
+			printf_s("\nSend RPC lookup endpointmapper second call \n");
+		}
 		sniffThread = CreateThread(NULL, 0, sniffer_thread_IP, threadData, 0, lpExitCode);
 		for (int k = 0; k < deviceCount; k++){
 			threadData->numberOfIPDev = k;
@@ -607,11 +1030,15 @@ int main(int argc, char **argv) {
 			printf_s("\nScan duration reached; stopping early.\n");
 			goto finalize;
 		}
-		printf_s("\nRPC lookup second call finished \n\n");
+		if (shouldPrintRpcOutput(mode)) {
+			printf_s("\nRPC lookup second call finished \n\n");
+		}
 
 
 		// reuse remote handler
-		printf_s("\nSend RPC implicit read realidentificationdata \n");
+		if (shouldPrintRpcOutput(mode)) {
+			printf_s("\nSend RPC implicit read realidentificationdata \n");
+		}
 		sniffThread = CreateThread(NULL, 0, sniffer_thread_remote, threadData, 0, lpExitCode);
 		for (int k = 0; k < deviceCount; k++){
 
@@ -629,7 +1056,9 @@ int main(int argc, char **argv) {
 		sniffThread = CreateThread(NULL, 0, sniffer_thread_remote, threadData, 0, lpExitCode);
 		linked_list_t* list = threadData->first;
 		slotParameter slotpara;
-		printf_s("\nSend RPC implicit read PDRealData for one subslot \n");
+		if (shouldPrintRpcOutput(mode)) {
+			printf_s("\nSend RPC implicit read PDRealData for one subslot \n");
+		}
 
 		for (int k = 0; k < deviceCount; k++, list = list->next){
 			linkedList_slot* slot = list->device->slotList;
@@ -655,10 +1084,14 @@ int main(int argc, char **argv) {
 			printf_s("\nScan duration reached; stopping early.\n");
 			goto finalize;
 		}
-		printf_s("\nPDRealData for each subslot call finished \n\n");
+		if (shouldPrintRpcOutput(mode)) {
+			printf_s("\nPDRealData for each subslot call finished \n\n");
+		}
 
 
-		printf_s("\nSend RPC implicit read I&M data for each module \n");
+		if (shouldPrintRpcOutput(mode)) {
+			printf_s("\nSend RPC implicit read I&M data for each module \n");
+		}
 		slotpara.posSubslot = -1; // set to non reachable value
 		sniffThread = CreateThread(NULL, 0, sniffer_thread_remote, threadData, 0, lpExitCode);
 		list = threadData->first;
@@ -677,7 +1110,9 @@ int main(int argc, char **argv) {
 		}
 		WaitForSingleObject(sniffThread, INFINITE);
 
-		printf_s("\nI&M data call for each module finished \n\n");
+		if (shouldPrintRpcOutput(mode)) {
+			printf_s("\nI&M data call for each module finished \n\n");
+		}
 
 
 	}
@@ -688,9 +1123,12 @@ int main(int argc, char **argv) {
 finalize:
 	pcap_freealldevs(threadData->alldevs);
 
-
-
-	printResultsToStdout(threadData->first);
+	if (shouldPrintTopologyOutput(mode)) {
+		printTopologyToStdout(threadData);
+	}
+	else {
+		printResultsToStdout(threadData->first);
+	}
 	if (options.interactive) {
 		#ifdef _WIN32
         system("pause");

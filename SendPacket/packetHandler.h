@@ -20,6 +20,7 @@ extern unsigned int seqNumberCounter;
 extern unsigned short identnmb;
 extern long g_scanDurationMs;
 extern bool g_scanStopRequested;
+extern int g_scanOutputMode;
 
 extern datasheet* createDatasheet();
 

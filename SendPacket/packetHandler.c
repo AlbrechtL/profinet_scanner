@@ -112,8 +112,12 @@ int sendPacket_DCP(threadData_t* threadData)
 		errbuf			// error buffer
 		)) == NULL) {
 		fprintf(stderr,
-			"\nUnable to open the adapter. %s is not supported by Npcap\n",
-			d->name);
+			"\nUnable to open the adapter '%s'. pcap error: %s\n",
+			d->name,
+			errbuf);
+#ifndef _WIN32
+		fprintf(stderr, "Packet capture on Linux usually requires elevated privileges. Try running with doas.\n");
+#endif
 		return 2;
 	}
 
@@ -568,8 +572,12 @@ int sendPacket_RPC(threadData_t* threadData)
 		errbuf			// error buffer
 		)) == NULL) {
 		fprintf(stderr,
-			"\nUnable to open the adapter. %s is not supported by Npcap\n",
-			(char*)d);
+			"\nUnable to open the adapter '%s'. pcap error: %s\n",
+			d->name,
+			errbuf);
+#ifndef _WIN32
+		fprintf(stderr, "Packet capture on Linux usually requires elevated privileges. Try running with doas.\n");
+#endif
 		return 2;
 	}
 
@@ -1089,8 +1097,12 @@ int sendpacket_IM(threadData_t* threadData, int deviceNumber, u_short parameterI
 		errbuf			// error buffer
 		)) == NULL) {
 		fprintf(stderr,
-			"\nUnable to open the adapter. %s is not supported by Npcap\n",
-			(char*)d);
+			"\nUnable to open the adapter '%s'. pcap error: %s\n",
+			d->name,
+			errbuf);
+#ifndef _WIN32
+		fprintf(stderr, "Packet capture on Linux usually requires elevated privileges. Try running with doas.\n");
+#endif
 		return 2;
 	}
 
