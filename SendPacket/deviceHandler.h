@@ -19,6 +19,7 @@ extern mac_address* getMAC(const char *ip);
 
 extern ip_address* getAdapterDefaultGateway_IP(threadData_t* threadData);
 extern void getAdapterDefaultGateway_MAC(threadData_t* threadData, ip_address* defaultGateway);
+extern int resolveRemoteDestinationMac(threadData_t* threadData, const ip_address* targetIp, mac_address* resolvedMac);
 
 
 extern threadData_t* createDataStruct();

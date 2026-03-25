@@ -301,6 +301,212 @@ void extractIP(ip_address* ip, u_long address)
 	ip->byte4 = *(p + 3);
 }
 
+static uint32_t ipAddressToUint32(ip_address address)
+{
+	return ((uint32_t)address.byte1 << 24) |
+		((uint32_t)address.byte2 << 16) |
+		((uint32_t)address.byte3 << 8) |
+		(uint32_t)address.byte4;
+}
+
+static bool isTargetOnLocalSubnet(const threadData_t* threadData, const ip_address* targetIp)
+{
+	if (!threadData || !targetIp) {
+		return false;
+	}
+
+	uint32_t localAddress = ipAddressToUint32(threadData->ownIp);
+	uint32_t subnetMask = ipAddressToUint32(threadData->subnetmask);
+	uint32_t targetAddress = ipAddressToUint32(*targetIp);
+
+	return (localAddress & subnetMask) == (targetAddress & subnetMask);
+}
+
+static const char* getSelectedAdapterName(const threadData_t* threadData)
+{
+	pcap_if_t* device;
+	int index;
+
+	if (!threadData || !threadData->alldevs || netAdapterNmb < 1) {
+		return NULL;
+	}
+
+	for (device = threadData->alldevs, index = 0; index < netAdapterNmb - 1 && device != NULL; device = device->next, index++);
+	if (!device) {
+		return NULL;
+	}
+
+	return device->name;
+}
+
+static void copyMacAddressValue(mac_address* destination, const mac_address* source)
+{
+	if (!destination || !source) {
+		return;
+	}
+
+	destination->byte1 = source->byte1;
+	destination->byte2 = source->byte2;
+	destination->byte3 = source->byte3;
+	destination->byte4 = source->byte4;
+	destination->byte5 = source->byte5;
+	destination->byte6 = source->byte6;
+}
+
+static int parseMacAddressString(const char* macString, mac_address* resolvedMac)
+{
+	unsigned int byte1;
+	unsigned int byte2;
+	unsigned int byte3;
+	unsigned int byte4;
+	unsigned int byte5;
+	unsigned int byte6;
+
+	if (!macString || !resolvedMac) {
+		return -1;
+	}
+
+	if (sscanf(macString, "%x:%x:%x:%x:%x:%x", &byte1, &byte2, &byte3, &byte4, &byte5, &byte6) != 6) {
+		return -1;
+	}
+
+	resolvedMac->byte1 = (u_char)byte1;
+	resolvedMac->byte2 = (u_char)byte2;
+	resolvedMac->byte3 = (u_char)byte3;
+	resolvedMac->byte4 = (u_char)byte4;
+	resolvedMac->byte5 = (u_char)byte5;
+	resolvedMac->byte6 = (u_char)byte6;
+	return 0;
+}
+
+#ifdef _WIN32
+static void warmUpArpCacheForIp(const char* ipaddr)
+{
+	char pingbuf[64];
+	FILE* fp;
+
+	if (!ipaddr) {
+		return;
+	}
+
+	sprintf_s(pingbuf, sizeof(pingbuf), "ping -n 1 -l 1 %s", ipaddr);
+	fp = _popen(pingbuf, "r");
+	if (!fp) {
+		return;
+	}
+
+	while (fgetc(fp) != EOF) {}
+	_pclose(fp);
+}
+
+static int lookupArpMacAddress(const char* ipaddr, const char* interfaceName, mac_address* resolvedMac)
+{
+	char arpbuf[64];
+	char outbuf[BUFSIZE];
+	FILE* fp;
+
+	(void)interfaceName;
+
+	if (!ipaddr || !resolvedMac) {
+		return -1;
+	}
+
+	sprintf_s(arpbuf, sizeof(arpbuf), "arp -a %s", ipaddr);
+	fp = _popen(arpbuf, "r");
+	if (!fp) {
+		return -1;
+	}
+
+	while (fgets(outbuf, sizeof(outbuf), fp) != NULL) {
+		char foundIp[64];
+		char mac[32];
+		char type[32];
+
+		if (sscanf(outbuf, "%63s %31s %31s", foundIp, mac, type) != 3) {
+			continue;
+		}
+
+		if (strcmp(foundIp, ipaddr) == 0) {
+			for (size_t index = 0; mac[index] != '\0'; index++) {
+				if (mac[index] == '-') {
+					mac[index] = ':';
+				}
+			}
+
+			_pclose(fp);
+			return parseMacAddressString(mac, resolvedMac);
+		}
+	}
+
+	_pclose(fp);
+	return -1;
+}
+#else
+static void warmUpArpCacheForIp(const char* interfaceName, const char* ipaddr)
+{
+	char pingcmd[160];
+
+	if (!ipaddr) {
+		return;
+	}
+
+	if (interfaceName && interfaceName[0] != '\0') {
+		snprintf(pingcmd, sizeof(pingcmd), "ping -I %s -c 1 -W 1 %s > /dev/null 2>&1", interfaceName, ipaddr);
+	} else {
+		snprintf(pingcmd, sizeof(pingcmd), "ping -c 1 -W 1 %s > /dev/null 2>&1", ipaddr);
+	}
+
+	(void)system(pingcmd);
+}
+
+static int lookupArpMacAddress(const char* ipaddr, const char* interfaceName, mac_address* resolvedMac)
+{
+	FILE* arpFile;
+	char line[256];
+
+	if (!ipaddr || !resolvedMac) {
+		return -1;
+	}
+
+	arpFile = fopen("/proc/net/arp", "r");
+	if (!arpFile) {
+		return -1;
+	}
+
+	if (!fgets(line, sizeof(line), arpFile)) {
+		fclose(arpFile);
+		return -1;
+	}
+
+	while (fgets(line, sizeof(line), arpFile)) {
+		char foundIp[64];
+		char hwType[16];
+		char flags[16];
+		char mac[32];
+		char mask[32];
+		char device[IFNAMSIZ];
+
+		if (sscanf(line, "%63s %15s %15s %31s %31s %15s", foundIp, hwType, flags, mac, mask, device) != 6) {
+			continue;
+		}
+
+		if (strcmp(foundIp, ipaddr) != 0) {
+			continue;
+		}
+
+		if (interfaceName && interfaceName[0] != '\0' && strcmp(device, interfaceName) != 0) {
+			continue;
+		}
+
+		fclose(arpFile);
+		return parseMacAddressString(mac, resolvedMac);
+	}
+
+	fclose(arpFile);
+	return -1;
+}
+#endif
+
 
 
 
@@ -562,127 +768,68 @@ void getAdapterDefaultGateway_MAC(threadData_t* threadData, ip_address* defaultG
 	}
 
 #ifdef _WIN32
-	// ping the default gateway
-	// use arp -a ipaddress to get the mac address of router
-
-	// size of ping buffer 
-	char pingbuf[32];
-	sprintf_s(pingbuf, sizeof(pingbuf), "ping -n 1 -l 1 %d.%d.%d.%d", defaultGateway->byte1, defaultGateway->byte2, defaultGateway->byte3, defaultGateway->byte4 );
-
-	char arpbuf[32];
-	sprintf_s(arpbuf, sizeof(arpbuf), "arp -a %d.%d.%d.%d", defaultGateway->byte1, defaultGateway->byte2, defaultGateway->byte3, defaultGateway->byte4);
-
-	// build string to compare
 	char ipaddr[16];
 	sprintf_s(ipaddr, sizeof(ipaddr), "%d.%d.%d.%d", defaultGateway->byte1, defaultGateway->byte2, defaultGateway->byte3, defaultGateway->byte4);
-	
-
-	char outbuf[BUFSIZE];
-	FILE* fp;
-
-	// ping the default gateway to make sure it is in the arp table
-	if ((fp = _popen(pingbuf, "r")) == NULL)
-	{
-		printf("Error opening pipe!\n");
-		return;
+	warmUpArpCacheForIp(ipaddr);
+	if (lookupArpMacAddress(ipaddr, NULL, threadData->defaultGatewayMAC) != 0) {
+		memset(threadData->defaultGatewayMAC, 0, sizeof(*threadData->defaultGatewayMAC));
 	}
-	if (_pclose(fp))  {
-		printf("Command not found or exited with error status\n");
-		return;
-	}
-
-
-	if ((fp = _popen(arpbuf, "r")) == NULL)
-	{
-		printf("Error opening pipe!\n");
-		return;
-	}
-
-	while (fgets(outbuf, BUFSIZE, fp) != NULL) {}
-
-	// arp stops at the given ip, it shows only the given ip
-	int offset = 0;
-	
-	char * foundIPaddr = cutDataFromString((u_char*)outbuf, &offset, false);
-	char * mac = cutDataFromString((u_char*)outbuf, &offset, false); // string with form xx-xx-xx-xx-xx-xx to xxxxxxxxxxxx
-
-	stripEnter(mac, "-");
-
-	char buff[5]= { '0', 'x', ' ', ' ', '\0'};
-	u_char mac_u[6];
-	for (int i = 0, j = 0; i < 6; i++, j=j+2)
-	{
-
-		buff[2] = mac[j];
-		buff[3] = mac[j + 1];
-		//buff[4] = 0;
-		mac_u[i] =(u_char) strtol(buff, NULL, 0);
-	}
-	
-	
-
-	if (_pclose(fp))  {
-		printf("Command not found or exited with error status\n");
-		return;
-	
-	}
-	
-	threadData->defaultGatewayMAC->byte1 = mac_u[0];
-	threadData->defaultGatewayMAC->byte2 = mac_u[1];
-	threadData->defaultGatewayMAC->byte3 = mac_u[2];
-	threadData->defaultGatewayMAC->byte4 = mac_u[3];
-	threadData->defaultGatewayMAC->byte5 = mac_u[4];
-	threadData->defaultGatewayMAC->byte6 = mac_u[5];
 
 #else
 	char ipaddr[16];
 	snprintf(ipaddr, sizeof(ipaddr), "%d.%d.%d.%d", defaultGateway->byte1, defaultGateway->byte2, defaultGateway->byte3, defaultGateway->byte4);
-
-	char pingcmd[96];
-	snprintf(pingcmd, sizeof(pingcmd), "ping -c 1 -W 1 %s > /dev/null 2>&1", ipaddr);
-	(void)system(pingcmd);
-
-	FILE* arpFile = fopen("/proc/net/arp", "r");
-	if (!arpFile) {
-		return;
+	warmUpArpCacheForIp(getSelectedAdapterName(threadData), ipaddr);
+	if (lookupArpMacAddress(ipaddr, getSelectedAdapterName(threadData), threadData->defaultGatewayMAC) != 0) {
+		memset(threadData->defaultGatewayMAC, 0, sizeof(*threadData->defaultGatewayMAC));
 	}
-
-	char line[256];
-	if (!fgets(line, sizeof(line), arpFile)) {
-		fclose(arpFile);
-		return;
-	}
-
-	while (fgets(line, sizeof(line), arpFile)) {
-		char foundIp[64];
-		char hwType[16];
-		char flags[16];
-		char mac[32];
-		char mask[32];
-		char device[IFNAMSIZ];
-
-		if (sscanf(line, "%63s %15s %15s %31s %31s %15s", foundIp, hwType, flags, mac, mask, device) != 6) {
-			continue;
-		}
-
-		if (strcmp(foundIp, ipaddr) == 0) {
-			unsigned int b1, b2, b3, b4, b5, b6;
-			if (sscanf(mac, "%x:%x:%x:%x:%x:%x", &b1, &b2, &b3, &b4, &b5, &b6) == 6) {
-				threadData->defaultGatewayMAC->byte1 = (u_char)b1;
-				threadData->defaultGatewayMAC->byte2 = (u_char)b2;
-				threadData->defaultGatewayMAC->byte3 = (u_char)b3;
-				threadData->defaultGatewayMAC->byte4 = (u_char)b4;
-				threadData->defaultGatewayMAC->byte5 = (u_char)b5;
-				threadData->defaultGatewayMAC->byte6 = (u_char)b6;
-				break;
-			}
-		}
-	}
-
-	fclose(arpFile);
 #endif
 
 
+}
+
+int resolveRemoteDestinationMac(threadData_t* threadData, const ip_address* targetIp, mac_address* resolvedMac)
+{
+	const char* selectedAdapterName;
+	char ipaddr[16];
+	ip_address* defaultGatewayIP;
+
+	if (!threadData || !targetIp || !resolvedMac) {
+		return -1;
+	}
+
+	if (!isTargetOnLocalSubnet(threadData, targetIp)) {
+		if (!threadData->defaultGatewayMAC ||
+			(threadData->defaultGatewayMAC->byte1 == 0 &&
+			threadData->defaultGatewayMAC->byte2 == 0 &&
+			threadData->defaultGatewayMAC->byte3 == 0 &&
+			threadData->defaultGatewayMAC->byte4 == 0 &&
+			threadData->defaultGatewayMAC->byte5 == 0 &&
+			threadData->defaultGatewayMAC->byte6 == 0)) {
+			defaultGatewayIP = getAdapterDefaultGateway_IP(threadData);
+			if (!defaultGatewayIP) {
+				return -1;
+			}
+
+			getAdapterDefaultGateway_MAC(threadData, defaultGatewayIP);
+			free(defaultGatewayIP);
+		}
+
+		if (!threadData->defaultGatewayMAC) {
+			return -1;
+		}
+
+		copyMacAddressValue(resolvedMac, threadData->defaultGatewayMAC);
+		return 0;
+	}
+
+	selectedAdapterName = getSelectedAdapterName(threadData);
+	snprintf(ipaddr, sizeof(ipaddr), "%d.%d.%d.%d", targetIp->byte1, targetIp->byte2, targetIp->byte3, targetIp->byte4);
+#ifdef _WIN32
+	warmUpArpCacheForIp(ipaddr);
+#else
+	warmUpArpCacheForIp(selectedAdapterName, ipaddr);
+#endif
+	return lookupArpMacAddress(ipaddr, selectedAdapterName, resolvedMac);
 }
 
 // create a threadData struct and set all pointers to NULL

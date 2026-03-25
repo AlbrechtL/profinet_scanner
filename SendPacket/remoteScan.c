@@ -13,7 +13,7 @@
 // @param firstCall -> states if the rpc call is the first or the second one. The second one needs the handle 
 int sendPacket_RPC_rem(threadData_t* threadData, bool firstCall)
 {
-	if (!threadData || !threadData->alldevs || !threadData->defaultGatewayMAC) {
+	if (!threadData || !threadData->alldevs) {
 		fprintf(stderr, "\nMissing data for remote RPC send.\n");
 		return -1;
 	}
@@ -66,14 +66,29 @@ int sendPacket_RPC_rem(threadData_t* threadData, bool firstCall)
 		return -1;
 	}
 
+	ip_address* destinationIp = NULL;
+	mac_address destinationMac;
+	memset(&destinationMac, 0, sizeof(destinationMac));
+
+	if (!firstCall) {
+		destinationIp = &currentDevice->device->deviceIp;
+	} else if (threadData->targetIP && threadData->numberOfIPDev >= 0) {
+		destinationIp = &threadData->targetIP[threadData->numberOfIPDev];
+	}
+
+	if (!destinationIp || resolveRemoteDestinationMac(threadData, destinationIp, &destinationMac) != 0) {
+		fprintf(stderr, "\nUnable to resolve destination MAC for remote RPC send.\n");
+		return -1;
+	}
+
 	// address of router
 
-	packet_ip[0] = threadData->defaultGatewayMAC->byte1;
-	packet_ip[1] = threadData->defaultGatewayMAC->byte2;
-	packet_ip[2] = threadData->defaultGatewayMAC->byte3;
-	packet_ip[3] = threadData->defaultGatewayMAC->byte4;
-	packet_ip[4] = threadData->defaultGatewayMAC->byte5;
-	packet_ip[5] = threadData->defaultGatewayMAC->byte6;
+	packet_ip[0] = destinationMac.byte1;
+	packet_ip[1] = destinationMac.byte2;
+	packet_ip[2] = destinationMac.byte3;
+	packet_ip[3] = destinationMac.byte4;
+	packet_ip[4] = destinationMac.byte5;
+	packet_ip[5] = destinationMac.byte6;
 
 
 	// set mac source address
@@ -586,16 +601,17 @@ int sendpacket_IM_rem(threadData_t* threadData, u_short parameterIndex, slotPara
 
 	// remote, so it is the address of the default gateway
 	if (layer == 3){
-		if (!threadData->defaultGatewayMAC) {
-			fprintf(stderr, "\nDefault gateway MAC unavailable for remote IM send.\n");
+		mac_address destinationMac;
+		if (resolveRemoteDestinationMac(threadData, &currentDevice->device->deviceIp, &destinationMac) != 0) {
+			fprintf(stderr, "\nDestination MAC unavailable for remote IM send.\n");
 			return -1;
 		}
-		packet_IM[0] = threadData->defaultGatewayMAC->byte1;
-		packet_IM[1] = threadData->defaultGatewayMAC->byte2;
-		packet_IM[2] = threadData->defaultGatewayMAC->byte3;
-		packet_IM[3] = threadData->defaultGatewayMAC->byte4;
-		packet_IM[4] = threadData->defaultGatewayMAC->byte5;
-		packet_IM[5] = threadData->defaultGatewayMAC->byte6;
+		packet_IM[0] = destinationMac.byte1;
+		packet_IM[1] = destinationMac.byte2;
+		packet_IM[2] = destinationMac.byte3;
+		packet_IM[3] = destinationMac.byte4;
+		packet_IM[4] = destinationMac.byte5;
+		packet_IM[5] = destinationMac.byte6;
 	}
 	else{
 		packet_IM[0] = currentDevice->device->deviceMACaddress.byte1;
