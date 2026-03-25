@@ -311,6 +311,12 @@ Notes:
 
 ---
 
+## Disclaimer
+
+This project is being used as a sandbox for experimenting with AI-assisted programming. The code migration, build system updates, and documentation have been performed with AI assistance (GitHub Copilot) to explore modern development workflows and tooling.
+
+---
+
 ## Thanks
 
 This project is based on the original Profinet scanner by Eiwanger:
