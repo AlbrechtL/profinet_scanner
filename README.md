@@ -242,6 +242,64 @@ Topology note:
 - The initial DCP pass discovers reachable devices, and the later RPC reads extract local port IDs, peer MAC addresses, peer chassis IDs, and peer port IDs where the device supports them.
 - A topology link can only be shown if the device exposes this peer data through the PROFINET RPC reads.
 
+## Lab Tests (Linux)
+
+The repository now includes an external black-box test harness for manual lab execution against real connected PROFINET devices. The tests do not add any C code to the scanner. They run the built `pn_scanner` binary as-is and assert only stable CLI output for the three scan modes.
+
+Create and activate a project-local Python virtual environment, then install the test dependency:
+
+```sh
+python3 -m venv .venv-lab-tests
+. .venv-lab-tests/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements-test.txt
+```
+
+Run all real-device mode tests from the lab host with the active virtual environment:
+
+```sh
+doas ./.venv-lab-tests/bin/pytest \
+  --scanner-interface eth0 \
+  --remote-target 192.168.1.110
+```
+
+What the harness checks:
+
+- `local` mode finishes with a device summary containing the expected station name.
+- `remote` mode finishes with a device summary for the requested target IP and a non-empty device type.
+- `topology` mode prints the expected topology chain.
+
+Useful options:
+
+- `--scanner-bin PATH` to test a different build output.
+- `--local-expected-name NAME` to override the expected station name.
+- `--remote-expected-text TEXT` to assert additional stable remote-mode output.
+- `--topology-chain TEXT` to override the expected topology chain.
+- `--local-duration`, `--remote-duration`, and `--topology-duration` to tune scan runtimes.
+- `--sudo-cmd CMD` only for non-interactive privilege wrappers such as `doas -n` or `sudo -n`.
+
+To run the suite with more verbose pytest output:
+
+```sh
+. .venv-lab-tests/bin/activate
+doas ./.venv-lab-tests/bin/pytest -vv \
+  --scanner-bin ./build/SendPacket/pn_scanner \
+  --scanner-interface eth0 \
+  --remote-target 192.168.1.110
+```
+
+If you have passwordless privilege escalation configured, you can also keep running `pytest` as your normal user and pass a non-interactive wrapper:
+
+```sh
+pytest -vv \
+  --scanner-bin ./build/SendPacket/pn_scanner \
+  --scanner-interface eth0 \
+  --remote-target 192.168.1.110 \
+  --sudo-cmd "doas -n"
+```
+
+These tests are intentionally meant for Linux lab hosts with real hardware and the required capture privileges. They are not intended for unprivileged CI runners.
+
 ---
 
 ## Build (OpenWrt APK)

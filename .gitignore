@@ -19,3 +19,6 @@
 *.tmp
 *.swp
 *~
+
+# Local Python test environment
+/.venv-lab-tests/
