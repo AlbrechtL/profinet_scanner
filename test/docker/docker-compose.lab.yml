@@ -1,0 +1,15 @@
+services:
+  pn-scanner-lab:
+    build:
+      context: ../..
+      dockerfile: test/docker/Dockerfile.lab
+    image: pn-scanner-lab
+    network_mode: host
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    working_dir: /workspace
+    command:
+      - -vv
+      - --scanner-interface=${SCANNER_INTERFACE:?set SCANNER_INTERFACE}
+      - --remote-target=${REMOTE_TARGET:?set REMOTE_TARGET}

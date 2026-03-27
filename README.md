@@ -246,19 +246,82 @@ Topology note:
 
 The repository now includes an external black-box test harness for manual lab execution against real connected PROFINET devices. The tests do not add any C code to the scanner. They run the built `pn_scanner` binary as-is and assert only stable CLI output for the three scan modes.
 
+### Containerized lab tests (Docker)
+
+You can also run the same real-device lab tests from a Docker container based on Alpine Linux. The container builds `pn_scanner` during image creation and then runs the existing pytest suite against the real PROFINET network.
+
+Build the lab test image:
+
+```sh
+docker build -f test/docker/Dockerfile.lab -t pn-scanner-lab .
+```
+
+Or build it with Docker Compose:
+
+```sh
+docker compose -f test/docker/docker-compose.lab.yml build
+```
+
+Run the tests against the real network from the container:
+
+```sh
+docker run --rm \
+  --network host \
+  --cap-add NET_RAW \
+  --cap-add NET_ADMIN \
+  pn-scanner-lab -vv \
+  --scanner-interface eth0 \
+  --remote-target 192.168.1.110
+```
+
+The same run with Docker Compose:
+
+```sh
+export SCANNER_INTERFACE=eth0
+export REMOTE_TARGET=192.168.1.110
+docker compose -f test/docker/docker-compose.lab.yml run --rm pn-scanner-lab
+```
+
+Notes for the container path:
+
+- `--network host` is required so the container can see the real host interface and the Layer 2 broadcast domain.
+- `--cap-add NET_RAW` and `--cap-add NET_ADMIN` are required for live libpcap capture/send and related interface access.
+- Do not pass `--sudo-cmd` in the container workflow. Run the container with the required capabilities instead.
+- If explicit capabilities are still insufficient on your machine, try `--privileged` once as a troubleshooting fallback to distinguish runtime capability issues from general container-network issues.
+- If the chosen interface name is not visible inside the container, first check the available interfaces by overriding the image entrypoint:
+
+```sh
+docker run --rm \
+  --network host \
+  --cap-add NET_RAW \
+  --cap-add NET_ADMIN \
+  --entrypoint /workspace/build/SendPacket/pn_scanner \
+  pn-scanner-lab --list-interfaces
+```
+
+The same interface listing with Docker Compose:
+
+```sh
+docker compose -f test/docker/docker-compose.lab.yml run --rm \
+  --entrypoint /workspace/build/SendPacket/pn_scanner \
+  pn-scanner-lab --list-interfaces
+```
+
+### Host lab tests
+
 Create and activate a project-local Python virtual environment, then install the test dependency:
 
 ```sh
 python3 -m venv .venv-lab-tests
 . .venv-lab-tests/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -r requirements-test.txt
+python -m pip install -r test/requirements.txt
 ```
 
 Run all real-device mode tests from the lab host with the active virtual environment:
 
 ```sh
-doas ./.venv-lab-tests/bin/pytest \
+doas ./.venv-lab-tests/bin/pytest -c test/pytest.ini \
   --scanner-interface eth0 \
   --remote-target 192.168.1.110
 ```
@@ -282,7 +345,7 @@ To run the suite with more verbose pytest output:
 
 ```sh
 . .venv-lab-tests/bin/activate
-doas ./.venv-lab-tests/bin/pytest -vv \
+doas ./.venv-lab-tests/bin/pytest -c test/pytest.ini -vv \
   --scanner-bin ./build/SendPacket/pn_scanner \
   --scanner-interface eth0 \
   --remote-target 192.168.1.110
@@ -291,7 +354,7 @@ doas ./.venv-lab-tests/bin/pytest -vv \
 If you have passwordless privilege escalation configured, you can also keep running `pytest` as your normal user and pass a non-interactive wrapper:
 
 ```sh
-pytest -vv \
+pytest -c test/pytest.ini -vv \
   --scanner-bin ./build/SendPacket/pn_scanner \
   --scanner-interface eth0 \
   --remote-target 192.168.1.110 \

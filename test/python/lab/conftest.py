@@ -65,7 +65,7 @@ def _validate_sudo_cmd(sudo_cmd: tuple[str, ...]) -> None:
 
 @pytest.fixture(scope="session")
 def lab_config(pytestconfig: pytest.Config) -> LabConfig:
-    repo_root = Path(str(pytestconfig.rootpath))
+    repo_root = Path(__file__).resolve().parents[3]
     scanner_bin_option = pytestconfig.getoption("scanner_bin")
     scanner_bin = (
         Path(scanner_bin_option).expanduser()

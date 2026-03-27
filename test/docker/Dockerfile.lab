@@ -1,0 +1,22 @@
+FROM alpine:3.21
+
+RUN apk add --no-cache \
+    build-base \
+    cmake \
+    libpcap-dev \
+    python3 \
+    py3-pip
+
+WORKDIR /workspace
+
+COPY . /workspace
+
+RUN python3 -m venv /opt/venv \
+    && /opt/venv/bin/python -m pip install --upgrade pip \
+    && /opt/venv/bin/python -m pip install -r test/requirements.txt \
+    && cmake -S . -B build \
+    && cmake --build build -j"$(getconf _NPROCESSORS_ONLN)"
+
+ENV PATH="/opt/venv/bin:${PATH}"
+
+ENTRYPOINT ["python3", "-m", "pytest", "-c", "test/pytest.ini"]
