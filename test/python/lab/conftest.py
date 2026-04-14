@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 import os
 from pathlib import Path
 import re
@@ -13,13 +14,15 @@ import pytest
 @dataclass(frozen=True)
 class LabConfig:
     repo_root: Path
+    profile_path: Path | None
     scanner_bin: Path
     scanner_interface: str
     remote_target: str
     sudo_cmd: tuple[str, ...]
-    local_expected_name: str
+    local_expected_names: tuple[str, ...]
     remote_expected_text: str | None
-    topology_chain: str
+    topology_chain: str | None
+    topology_links_expected: bool
     local_duration: int
     remote_duration: int
     topology_duration: int
@@ -63,9 +66,79 @@ def _validate_sudo_cmd(sudo_cmd: tuple[str, ...]) -> None:
     )
 
 
+def _load_profile(pytestconfig: pytest.Config) -> tuple[Path | None, dict[str, object]]:
+    profile_option = pytestconfig.getoption("lab_profile")
+    if not profile_option:
+        return None, {}
+
+    profile_path = Path(profile_option).expanduser()
+    if not profile_path.is_absolute():
+        profile_path = Path.cwd() / profile_path
+
+    if not profile_path.exists():
+        raise pytest.UsageError(f"lab profile not found at {profile_path}")
+
+    try:
+        profile_data = json.loads(profile_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise pytest.UsageError(f"lab profile {profile_path} is not valid JSON: {exc}") from exc
+
+    if not isinstance(profile_data, dict):
+        raise pytest.UsageError(f"lab profile {profile_path} must contain a JSON object")
+
+    return profile_path.resolve(), profile_data
+
+
+def _optional_profile_string(profile: dict[str, object], key: str) -> str | None:
+    value = profile.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise pytest.UsageError(f"profile field {key} must be a string")
+    return value
+
+
+def _optional_profile_int(profile: dict[str, object], key: str) -> int | None:
+    value = profile.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, int):
+        raise pytest.UsageError(f"profile field {key} must be an integer")
+    return value
+
+
+def _optional_profile_bool(profile: dict[str, object], key: str) -> bool | None:
+    value = profile.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, bool):
+        raise pytest.UsageError(f"profile field {key} must be a boolean")
+    return value
+
+
+def _profile_expected_names(profile: dict[str, object]) -> tuple[str, ...] | None:
+    names = profile.get("local_expected_names")
+    if names is None:
+        single_name = _optional_profile_string(profile, "local_expected_name")
+        if single_name:
+            return (single_name,)
+        return None
+
+    if not isinstance(names, list) or not names:
+        raise pytest.UsageError("profile field local_expected_names must be a non-empty JSON array")
+
+    normalized_names: list[str] = []
+    for value in names:
+        if not isinstance(value, str) or not value:
+            raise pytest.UsageError("profile field local_expected_names must contain non-empty strings")
+        normalized_names.append(value)
+    return tuple(normalized_names)
+
+
 @pytest.fixture(scope="session")
 def lab_config(pytestconfig: pytest.Config) -> LabConfig:
     repo_root = Path(__file__).resolve().parents[3]
+    profile_path, profile = _load_profile(pytestconfig)
     scanner_bin_option = pytestconfig.getoption("scanner_bin")
     scanner_bin = (
         Path(scanner_bin_option).expanduser()
@@ -76,25 +149,47 @@ def lab_config(pytestconfig: pytest.Config) -> LabConfig:
     if not scanner_bin.exists():
         pytest.skip(f"pn_scanner binary not found at {scanner_bin}")
 
-    scanner_interface = _required_option(pytestconfig, "scanner_interface")
-    remote_target = _required_option(pytestconfig, "remote_target")
+    scanner_interface = pytestconfig.getoption("scanner_interface") or _optional_profile_string(profile, "scanner_interface")
+    if not scanner_interface:
+        pytest.skip("missing required lab option scanner_interface")
+
+    remote_target = pytestconfig.getoption("remote_target") or _optional_profile_string(profile, "remote_target")
+    if not remote_target:
+        pytest.skip("missing required lab option remote_target")
+
     sudo_cmd_text = pytestconfig.getoption("sudo_cmd")
     sudo_cmd = tuple(shlex.split(sudo_cmd_text))
     _validate_sudo_cmd(sudo_cmd)
-    remote_expected_text = pytestconfig.getoption("remote_expected_text") or None
+    remote_expected_text = pytestconfig.getoption("remote_expected_text") or _optional_profile_string(profile, "remote_expected_text")
+    local_expected_names = _profile_expected_names(profile)
+    if local_expected_names is None:
+        local_expected_names = (pytestconfig.getoption("local_expected_name"),)
+    topology_chain = _optional_profile_string(profile, "topology_chain")
+    topology_links_expected = _optional_profile_bool(profile, "topology_links_expected")
+    if topology_links_expected is None:
+        topology_links_expected = topology_chain is not None
+
+    if topology_links_expected and not topology_chain:
+        topology_chain = pytestconfig.getoption("topology_chain")
+
+    local_duration = _optional_profile_int(profile, "local_duration") or pytestconfig.getoption("local_duration")
+    remote_duration = _optional_profile_int(profile, "remote_duration") or pytestconfig.getoption("remote_duration")
+    topology_duration = _optional_profile_int(profile, "topology_duration") or pytestconfig.getoption("topology_duration")
 
     return LabConfig(
         repo_root=repo_root,
+        profile_path=profile_path,
         scanner_bin=scanner_bin.resolve(),
         scanner_interface=scanner_interface,
         remote_target=remote_target,
         sudo_cmd=sudo_cmd,
-        local_expected_name=pytestconfig.getoption("local_expected_name"),
+        local_expected_names=local_expected_names,
         remote_expected_text=remote_expected_text,
-        topology_chain=pytestconfig.getoption("topology_chain"),
-        local_duration=pytestconfig.getoption("local_duration"),
-        remote_duration=pytestconfig.getoption("remote_duration"),
-        topology_duration=pytestconfig.getoption("topology_duration"),
+        topology_chain=topology_chain,
+        topology_links_expected=topology_links_expected,
+        local_duration=local_duration,
+        remote_duration=remote_duration,
+        topology_duration=topology_duration,
     )
 
 

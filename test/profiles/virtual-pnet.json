@@ -1,0 +1,13 @@
+{
+  "scanner_interface": "eth0",
+  "remote_target": "172.28.0.11",
+  "local_expected_names": [
+    "pn-device-1",
+    "pn-device-2",
+    "pn-device-3"
+  ],
+  "topology_links_expected": false,
+  "local_duration": 10,
+  "remote_duration": 10,
+  "topology_duration": 20
+}

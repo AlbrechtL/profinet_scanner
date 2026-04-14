@@ -335,6 +335,7 @@ What the harness checks:
 Useful options:
 
 - `--scanner-bin PATH` to test a different build output.
+- `--lab-profile PATH` to load scanner interface, targets, expected names, and durations from a JSON profile.
 - `--local-expected-name NAME` to override the expected station name.
 - `--remote-expected-text TEXT` to assert additional stable remote-mode output.
 - `--topology-chain TEXT` to override the expected topology chain.
@@ -362,6 +363,32 @@ pytest -c test/pytest.ini -vv \
 ```
 
 These tests are intentionally meant for Linux lab hosts with real hardware and the required capture privileges. They are not intended for unprivileged CI runners.
+
+### Virtual PROFINET Stack Scaffold
+
+The repository now also contains the first scaffold for a fully virtualized integration environment:
+
+- a three-device profile at `test/profiles/virtual-pnet.json`
+- a dedicated compose stack at `test/docker/docker-compose.virtual.yml`
+- a first device application scaffold at `test/virtual_device/`
+
+This work is intentionally staged. The scanner side is ready for a profile-driven three-device environment, and the Linux interface filter now accepts container Ethernet interfaces as long as they are up, non-loopback, and real Ethernet links.
+
+Important limitation:
+
+- The public `rtlabs-com/p-net` GitHub repository is an evaluation package and states that it does not contain the port sources required to build a runnable Linux device.
+- Because of that, `test/docker/Dockerfile.virtual-device` and `test/virtual_device/CMakeLists.txt` currently fail fast when pointed at that evaluation tree.
+- To finish the virtual device containers you will need a full p-net delivery with Linux porting sources, or a different PROFINET device implementation.
+
+What is already usable:
+
+- You can run the existing scanner tests against a JSON-backed profile with `--lab-profile`.
+- You can use `pn_scanner --list-interfaces` inside a normal container on a bridge network without being rejected purely because the interface is virtualized.
+
+What is not complete yet:
+
+- The virtual device image is a scaffold, not a validated runnable image.
+- The topology path still depends on exposing LLDP or PDPort peer data in a way that matches the scanner parser.
 
 ---
 

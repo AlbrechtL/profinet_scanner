@@ -1,0 +1,97 @@
+services:
+  pn-scanner-virtual-tests:
+    build:
+      context: ../..
+      dockerfile: test/docker/Dockerfile.lab
+    image: pn-scanner-virtual-tests
+    depends_on:
+      pn-device-1:
+        condition: service_started
+      pn-device-2:
+        condition: service_started
+      pn-device-3:
+        condition: service_started
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    working_dir: /workspace
+    command:
+      - -vv
+      - --lab-profile=/workspace/test/profiles/virtual-pnet.json
+    networks:
+      profinet-virtual:
+        ipv4_address: 172.28.0.10
+
+  pn-device-1:
+    build:
+      context: ../..
+      dockerfile: test/docker/Dockerfile.virtual-device
+    image: pn-scanner-virtual-device
+    mac_address: 02:42:ac:1c:00:0b
+    environment:
+      DEVICE_STATION_NAME: pn-device-1
+      DEVICE_IP_ADDRESS: 172.28.0.11
+      DEVICE_MAC_ADDRESS: 02:42:ac:1c:00:0b
+      DEVICE_PORT_NAME_1: port-001
+      DEVICE_PORT_NAME_2: port-002
+      DEVICE_PEER_STATION_1: pn-device-2
+      DEVICE_PEER_PORT_1: port-001
+      DEVICE_PEER_STATION_2: ""
+      DEVICE_PEER_PORT_2: ""
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    networks:
+      profinet-virtual:
+        ipv4_address: 172.28.0.11
+
+  pn-device-2:
+    image: pn-scanner-virtual-device
+    depends_on:
+      - pn-device-1
+    mac_address: 02:42:ac:1c:00:0c
+    environment:
+      DEVICE_STATION_NAME: pn-device-2
+      DEVICE_IP_ADDRESS: 172.28.0.12
+      DEVICE_MAC_ADDRESS: 02:42:ac:1c:00:0c
+      DEVICE_PORT_NAME_1: port-001
+      DEVICE_PORT_NAME_2: port-002
+      DEVICE_PEER_STATION_1: pn-device-1
+      DEVICE_PEER_PORT_1: port-001
+      DEVICE_PEER_STATION_2: pn-device-3
+      DEVICE_PEER_PORT_2: port-001
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    networks:
+      profinet-virtual:
+        ipv4_address: 172.28.0.12
+
+  pn-device-3:
+    image: pn-scanner-virtual-device
+    depends_on:
+      - pn-device-2
+    mac_address: 02:42:ac:1c:00:0d
+    environment:
+      DEVICE_STATION_NAME: pn-device-3
+      DEVICE_IP_ADDRESS: 172.28.0.13
+      DEVICE_MAC_ADDRESS: 02:42:ac:1c:00:0d
+      DEVICE_PORT_NAME_1: port-001
+      DEVICE_PORT_NAME_2: port-002
+      DEVICE_PEER_STATION_1: pn-device-2
+      DEVICE_PEER_PORT_1: port-002
+      DEVICE_PEER_STATION_2: ""
+      DEVICE_PEER_PORT_2: ""
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    networks:
+      profinet-virtual:
+        ipv4_address: 172.28.0.13
+
+networks:
+  profinet-virtual:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24

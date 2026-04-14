@@ -15,18 +15,13 @@
 #endif
 
 #ifndef _WIN32
-static bool isRealEthernetInterface(const char* ifname)
+static bool isUsableEthernetInterface(const char* ifname)
 {
 	if (!ifname || ifname[0] == '\0') {
 		return false;
 	}
 
 	char pathBuffer[256];
-	snprintf(pathBuffer, sizeof(pathBuffer), "/sys/class/net/%s/device", ifname);
-	if (access(pathBuffer, F_OK) != 0) {
-		return false;
-	}
-
 	snprintf(pathBuffer, sizeof(pathBuffer), "/sys/class/net/%s/wireless", ifname);
 	if (access(pathBuffer, F_OK) == 0) {
 		return false;
@@ -38,6 +33,19 @@ static bool isRealEthernetInterface(const char* ifname)
 	}
 
 	struct ifreq ifr;
+	memset(&ifr, 0, sizeof(ifr));
+	strncpy(ifr.ifr_name, ifname, IFNAMSIZ - 1);
+
+	if (ioctl(fd, SIOCGIFFLAGS, &ifr) < 0) {
+		close(fd);
+		return false;
+	}
+
+	if ((ifr.ifr_flags & IFF_LOOPBACK) != 0 || (ifr.ifr_flags & IFF_UP) == 0) {
+		close(fd);
+		return false;
+	}
+
 	memset(&ifr, 0, sizeof(ifr));
 	strncpy(ifr.ifr_name, ifname, IFNAMSIZ - 1);
 
@@ -77,7 +85,7 @@ int obtainDeviceList(threadData_t* threadData)
 		d->next = NULL;
 
 #ifndef _WIN32
-		if (!isRealEthernetInterface(d->name)) {
+		if (!isUsableEthernetInterface(d->name)) {
 			pcap_freealldevs(d);
 			d = next;
 			continue;

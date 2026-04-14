@@ -23,9 +23,20 @@ def test_local_mode_discovers_expected_station(run_scanner, lab_config) -> None:
     result = run_scanner("local")
 
     assert_success(result)
-    assert "Starting local scan" in result.stdout
+    assert "Scan results (stdout):" in result.stdout
     assert "Topology results (stdout):" not in result.stdout
-    assert f"Name: {lab_config.local_expected_name}" in result.stdout
+    for expected_name in lab_config.local_expected_names:
+        assert f"Name: {expected_name}" in result.stdout
+
+    assert result.stdout.count("Device\n") >= len(lab_config.local_expected_names)
+
+
+def test_lab_profile_is_loaded_when_requested(lab_config) -> None:
+    if lab_config.profile_path is None:
+        pytest.skip("profile-backed configuration not requested")
+
+    assert lab_config.profile_path.exists()
+    assert lab_config.local_expected_names
 
 
 @pytest.mark.lab
@@ -34,7 +45,7 @@ def test_remote_mode_reports_target_device(run_scanner, lab_config) -> None:
     result = run_scanner("remote")
 
     assert_success(result)
-    assert "Starting remote scan" in result.stdout
+    assert "Scan results (stdout):" in result.stdout
     assert f"IP: {lab_config.remote_target}" in result.stdout
     assert re.search(r"(?m)^  Type: \S.+$", result.stdout), result.stdout
     assert re.search(r"(?m)^  UDP Port: \d+$", result.stdout), result.stdout
@@ -48,6 +59,11 @@ def test_topology_mode_reports_expected_chain(run_scanner, lab_config) -> None:
     result = run_scanner("topology")
 
     assert_success(result)
-    assert "Starting topology scan" in result.stdout
+    assert "Topology results (stdout):" in result.stdout
     assert "Topology source: PROFINET RPC peer data." in result.stdout
+    if not lab_config.topology_links_expected:
+        assert "No port-to-port links could be resolved from the current scan." in result.stdout
+        return
+
+    assert lab_config.topology_chain is not None
     assert normalize_whitespace(lab_config.topology_chain) in normalize_whitespace(result.stdout)

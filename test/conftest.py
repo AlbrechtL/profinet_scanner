@@ -36,6 +36,15 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         help="Optional privilege wrapper, for example 'doas' or 'sudo -n'.",
     )
     group.addoption(
+        "--lab-profile",
+        action="store",
+        default=None,
+        help=(
+            "Optional JSON file describing scanner-interface, remote-target, expected "
+            "station names, topology chain, and durations for a lab or virtual setup."
+        ),
+    )
+    group.addoption(
         "--local-expected-name",
         action="store",
         default="testxasensorf28b",
@@ -81,4 +90,8 @@ def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line(
         "markers",
         "privileged: requires elevated privileges to run pn_scanner on a capture interface",
+    )
+    config.addinivalue_line(
+        "markers",
+        "virtual: runs against the containerized virtual PROFINET test environment",
     )

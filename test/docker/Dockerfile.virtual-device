@@ -1,0 +1,44 @@
+FROM alpine:latest
+
+ARG PNET_SDK_URL=https://github.com/rtlabs-com/p-net/releases/download/public%2Fv1.0.2/p-net-1.0.2-Linux-x86_64.zip
+
+RUN apk add --no-cache \
+    ca-certificates \
+    gcompat \
+    libgcc \
+    libstdc++ \
+    unzip \
+    wget
+
+WORKDIR /workspace
+
+COPY test /workspace/test
+
+RUN mkdir -p /tmp/pnet-sdk-download && \
+    wget -O /tmp/pnet-sdk-download/p-net-sdk.zip "${PNET_SDK_URL}" && \
+    unzip /tmp/pnet-sdk-download/p-net-sdk.zip -d /tmp/pnet-sdk-download && \
+    sdk_dir="$(find /tmp/pnet-sdk-download -mindepth 1 -maxdepth 1 -type d | head -n 1)" && \
+    test -n "${sdk_dir}" && \
+    cp -R "${sdk_dir}" /opt/p-net-sdk
+
+RUN test -f /opt/p-net-sdk/cmake/PNetConfig.cmake || \
+    (echo "A usable P-Net Linux SDK was not found. Set PNET_SDK_URL to a downloadable Linux SDK zip from rtlabs-com/p-net releases." >&2 && exit 1)
+
+RUN printf '#!/bin/sh\nexit 0\n' > /usr/local/bin/set_network_parameters \
+    && chmod +x /usr/local/bin/set_network_parameters \
+    && printf '#!/bin/sh\nexit 0\n' > /usr/local/bin/set_profinet_leds \
+    && chmod +x /usr/local/bin/set_profinet_leds
+
+RUN printf '%s\n' \
+    '#!/bin/sh' \
+    'set -eu' \
+    'mkdir -p /var/lib/pn-device' \
+    'exec /usr/local/bin/pn_dev -v -i "${DEVICE_INTERFACE:-eth0}" -s "${DEVICE_STATION_NAME:-pn-device}" -p /var/lib/pn-device' \
+    > /usr/local/bin/pn-device-entrypoint \
+    && chmod +x /usr/local/bin/pn-device-entrypoint
+
+WORKDIR /workspace
+
+RUN cp /opt/p-net-sdk/bin/pn_dev /usr/local/bin/pn_dev
+
+ENTRYPOINT ["/usr/local/bin/pn-device-entrypoint"]
