@@ -13,7 +13,6 @@
 #include "common.h"
 
 #include "deviceHandler.h"
-#include "filehandler.h"
 #include "linkedList.h"
 #include "packetHandler.h"
 #include "remoteScan.h"
@@ -26,8 +25,6 @@
 unsigned short identnmb = 0;
 
 typedef struct cli_options {
-	bool interactive;
-	bool listInterfaces;
 	bool hasInterface;
 	bool hasMode;
 	bool hasTarget;
@@ -434,24 +431,21 @@ static void printHelp(const char* programName)
 {
 	printf("Usage:\n");
 	printf("  %s --help\n", programName);
-	printf("  %s --list-interfaces\n", programName);
-	printf("  %s --interface <index|name> --mode <local|remote|topology> [--target <a.b.c.d[-e]>]\n", programName);
-	printf("  %s --interface <index|name> --mode <local|remote|topology> [--target <a.b.c.d[-e]>] [--duration <seconds>]\n", programName);
-	printf("  %s --interactive\n\n", programName);
+	printf("  %s --interface <name> --mode <local|remote|topology> [--target <a.b.c.d[-e]>]\n", programName);
+	printf("  %s --interface <name> --mode <local|remote|topology> [--target <a.b.c.d[-e]>] [--duration <seconds>]\n", programName);
+	printf("\n");
 
 	printf("Options:\n");
 	printf("  --help               Show this help message and exit.\n");
-	printf("  --list-interfaces    List available capture interfaces and exit.\n");
-	printf("  --interface VALUE    Interface index (1-based) or interface name from --list-interfaces.\n");
+	printf("  --interface VALUE    Interface name (for example eth0 or enp0s31f6).\n");
 	printf("  --mode VALUE         Scan mode: local (DCP), remote (DCE/RPC), or topology (DCP + RPC peer links).\n");
 	printf("  --target VALUE       Remote target IP or range in the form a.b.c.d or a.b.c.d-e.\n");
 	printf("                       Required when --mode remote is used.\n");
 	printf("  --duration SECONDS   Stop capture after the given number of seconds.\n");
-	printf("  --interactive        Run prompt-based mode (default when no arguments are given).\n\n");
+	printf("\n");
 
 	printf("Examples:\n");
-	printf("  %s --list-interfaces\n", programName);
-	printf("  %s --interface 1 --mode local\n", programName);
+	printf("  %s --interface eth0 --mode local\n", programName);
 	printf("  %s --interface eth0 --mode remote --target 192.168.0.10-20\n", programName);
 	printf("  %s --interface eth0 --mode topology --duration 10\n", programName);
 	printf("  %s --interface eth0 --mode remote --target 192.168.0.10 --duration 10\n", programName);
@@ -505,33 +499,9 @@ static void printResultsToStdout(linked_list_t* list)
 	}
 }
 
-static void printInterfaces(threadData_t* threadData)
-{
-	pcap_if_t* device;
-	int index = 1;
-
-	printf("Available interfaces:\n");
-	for (device = threadData->alldevs; device != NULL; device = device->next, index++) {
-		printf("  [%d] %s", index, device->name ? device->name : "(unknown)");
-		if (device->description) {
-			printf(" - %s", device->description);
-		}
-		printf("\n");
-	}
-}
-
 static int resolveInterfaceIndex(threadData_t* threadData, const char* interfaceValue)
 {
 	if (!interfaceValue || interfaceValue[0] == '\0') {
-		return -1;
-	}
-
-	char* endptr = NULL;
-	long parsedIndex = strtol(interfaceValue, &endptr, 10);
-	if (endptr && *endptr == '\0') {
-		if (parsedIndex >= 1 && parsedIndex <= threadData->numberOfAdapters) {
-			return (int)parsedIndex;
-		}
 		return -1;
 	}
 
@@ -553,20 +523,16 @@ int main(int argc, char **argv) {
 
 	memset(&options, 0, sizeof(options));
 	options.mode = -1;
-	options.interactive = (argc == 1);
+
+	if (argc == 1) {
+		printHelp(argv[0]);
+		return 0;
+	}
 
 	for (int argumentIndex = 1; argumentIndex < argc; argumentIndex++) {
 		if (strcmp(argv[argumentIndex], "--help") == 0) {
 			printHelp(argv[0]);
 			return 0;
-		}
-		if (strcmp(argv[argumentIndex], "--interactive") == 0) {
-			options.interactive = true;
-			continue;
-		}
-		if (strcmp(argv[argumentIndex], "--list-interfaces") == 0) {
-			options.listInterfaces = true;
-			continue;
 		}
 		if (strcmp(argv[argumentIndex], "--interface") == 0) {
 			if (argumentIndex + 1 >= argc) {
@@ -628,19 +594,17 @@ int main(int argc, char **argv) {
 		return -1;
 	}
 
-	if (!options.interactive && !options.listInterfaces) {
-		if (!options.hasInterface) {
-			printf("Missing required option --interface in non-interactive mode\n");
-			return -1;
-		}
-		if (!options.hasMode) {
-			printf("Missing required option --mode in non-interactive mode\n");
-			return -1;
-		}
-		if (options.mode == 1 && !options.hasTarget) {
-			printf("Missing required option --target for remote mode\n");
-			return -1;
-		}
+	if (!options.hasInterface) {
+		printf("Missing required option --interface\n");
+		return -1;
+	}
+	if (!options.hasMode) {
+		printf("Missing required option --mode\n");
+		return -1;
+	}
+	if (options.mode == 1 && !options.hasTarget) {
+		printf("Missing required option --target for remote mode\n");
+		return -1;
 	}
 
 	// check if on windows, if so then load the npcap library
@@ -666,30 +630,16 @@ int main(int argc, char **argv) {
 		return -1;
 	}
 
-	if (options.listInterfaces)
-	{
-		printInterfaces(threadData);
-		pcap_freealldevs(threadData->alldevs);
-		free(threadData);
-		return 0;
-	}
-
 	if (options.hasInterface) {
 		inum = resolveInterfaceIndex(threadData, options.interfaceValue);
 		if (inum < 1 || inum > threadData->numberOfAdapters) {
-			printf_s("\nInterface value out of range or unknown: %s\n", options.interfaceValue);
+			printf_s("\nUnknown interface name: %s\n", options.interfaceValue);
 			pcap_freealldevs(threadData->alldevs);
 			free(threadData);
 			return -1;
 		}
-	} else if (options.interactive) {
-		// get interfacenumber to scan and send
-		printInterfaces(threadData);
-		printf_s("Enter the interface number (1-%d):", threadData->numberOfAdapters);
-		scanf_s("%d", &inum);
-		getchar(); // flush buffer
 	} else {
-		printf("Missing required option --interface in non-interactive mode\n");
+		printf("Missing required option --interface\n");
 		pcap_freealldevs(threadData->alldevs);
 		free(threadData);
 		return -1;
@@ -727,12 +677,8 @@ int main(int argc, char **argv) {
 
 	if (options.hasMode) {
 		mode = options.mode;
-	} else if (options.interactive) {
-		printf("\nScan local (0), remote (1), or topology (2): \n");
-		scanf_s("%d", &mode);
-		getchar(); // flush buffer
 	} else {
-		printf("Missing required option --mode in non-interactive mode\n");
+		printf("Missing required option --mode\n");
 		pcap_freealldevs(threadData->alldevs);
 		free(threadData);
 		return -1;
@@ -740,7 +686,7 @@ int main(int argc, char **argv) {
 
 	if (mode != 0 && mode != 1 && mode != 2)
 	{
-		printf("Invalid mode value. Use 0/1/2 in interactive mode or --mode local|remote|topology in CLI mode.\n");
+		printf("Invalid mode value. Use --mode local|remote|topology.\n");
 		pcap_freealldevs(threadData->alldevs);
 		free(threadData);
 		return -1;
@@ -757,9 +703,6 @@ int main(int argc, char **argv) {
 
 		if (options.hasTarget) {
 			strcpy_s(targetIP, sizeof(targetIP), options.targetValue);
-		} else if (options.interactive) {
-			printf_s("\nTarget IP address form xxx.xxx.xxx.xxx-xxx: \n");
-			fgets(targetIP, sizeof(targetIP), stdin);
 		} else {
 			printf("Missing required option --target for remote mode\n");
 			pcap_freealldevs(threadData->alldevs);
@@ -771,14 +714,6 @@ int main(int argc, char **argv) {
 		if ((range = checkIP(targetIP, threadData)) == -1){
 			pcap_freealldevs(threadData->alldevs);
 			free(threadData);
-			if (options.interactive) {
-				#ifdef _WIN32
-				system("pause");
-				#else
-				printf("Press Enter to continue...");
-				getchar();
-				#endif
-			}
 			return -1; // false IP
 		}
 
@@ -811,14 +746,6 @@ int main(int argc, char **argv) {
 			printf_s("No devices found with given ip\n\n");
 			pcap_freealldevs(threadData->alldevs);
 			free(threadData);
-			if (options.interactive) {
-				#ifdef _WIN32
-				system("pause");
-				#else
-				printf("Press Enter to continue...");
-				getchar();
-				#endif
-			}
 			return -1;
 		}
 		if (shouldPrintRpcOutput(mode)) {
@@ -1113,14 +1040,6 @@ finalize:
 	}
 	else {
 		printResultsToStdout(threadData->first);
-	}
-	if (options.interactive) {
-		#ifdef _WIN32
-        system("pause");
-        #else
-        printf("Press Enter to continue...");
-        getchar();
-        #endif
 	}
 
 	empty_list(threadData->first);

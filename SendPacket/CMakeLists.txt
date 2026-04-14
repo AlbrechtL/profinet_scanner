@@ -1,7 +1,6 @@
 add_executable(pn_scanner
     common.h
     deviceHandler.c
-    fileHandler.c
     linkedList.c
     main.c
     npcap_loader.c

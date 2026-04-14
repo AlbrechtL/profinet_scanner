@@ -45,25 +45,17 @@ Run the scanner from the build directory. Example paths:
 
 ```sh
 # Linux
-./build/SendPacket/pn_scanner
+./build/SendPacket/pn_scanner --help
 
 # Windows PowerShell
-.\build-windows\SendPacket\pn_scanner.exe
+.\build-windows\SendPacket\pn_scanner.exe --help
 ```
 
-The program supports interactive mode (default) and non-interactive CLI mode.
+The scanner is CLI-only. Running it without scan arguments prints the help text and exits.
 
-- Interactive mode (default):
-  ```sh
-  ./build/SendPacket/pn_scanner
-  ```
 - Show help:
   ```sh
   ./build/SendPacket/pn_scanner --help
-  ```
-- List interfaces:
-  ```sh
-  ./build/SendPacket/pn_scanner --list-interfaces
   ```
 
 On Windows, run the same commands against `pn_scanner.exe` in the selected build directory.
@@ -76,11 +68,8 @@ On Windows, run the same commands against `pn_scanner.exe` in the selected build
 --help
 	Show help message and exit.
 
---list-interfaces
-	Print available capture interfaces and exit.
-
---interface <index|name>
-	Select interface by 1-based index (from --list-interfaces) or interface name.
+--interface <name>
+  Select interface by name.
 
 --mode <local|remote|topology>
   Select scan mode: local uses PROFINET DCP (Layer 2), remote uses DCE/RPC (Layer 3),
@@ -97,16 +86,13 @@ On Windows, run the same commands against `pn_scanner.exe` in the selected build
 
 --duration <seconds>
   Stop the scan after the given number of seconds (applies to the overall run).
-
---interactive
-	Force prompt-based mode (also the default when no parameters are provided).
 ```
 
 Examples:
 
 ```sh
-# Local (DCP) scan (non-interactive)
-./build/SendPacket/pn_scanner --interface 1 --mode local
+# Local (DCP) scan
+./build/SendPacket/pn_scanner --interface eth0 --mode local
 
 # Topology scan on the selected Ethernet interface
 doas ./build/SendPacket/pn_scanner --interface eth0 --mode topology --duration 60
@@ -123,7 +109,7 @@ listening on enp0s31f6 for pn_dcp...
   DCP VendorID: 0x0011
   DCP DeviceID: 0xa3ff
 
-# Remote scan (DCE/RPC) (non-interactive)
+# Remote scan (DCE/RPC)
 ./build/SendPacket/pn_scanner --interface eth0 --mode remote --target 192.168.0.10-20
 
 # Real world example
@@ -150,7 +136,7 @@ Device
   Device ID: 0x0000
   UDP Port: 34964
 
-# Remote scan (DCE/RPC) (non-interactive)
+# Topology scan output
 ./build/SendPacket/pn_scanner --interface eth0 --mode topology
 Topology results (stdout):
 
@@ -204,13 +190,13 @@ Example commands:
 
 ```sh
 ./build-windows/SendPacket/pn_scanner.exe --help
-./build-windows/SendPacket/pn_scanner.exe --list-interfaces
+./build-windows/SendPacket/pn_scanner.exe --interface <name> --mode local
 ```
 
 Notes:
 
 - Use the `MSYS2 UCRT64` shell for configure and build so the correct gcc, pkg-config, and runtime DLL paths are available.
-- If `--list-interfaces` reports no suitable Ethernet interfaces, confirm that Npcap is installed and that the machine has a usable wired capture interface for the scan.
+- If the scanner reports an unknown interface name, confirm that Npcap is installed and that the machine has a usable wired capture interface for the scan.
 - Windows binaries built this way depend on the MSYS2 UCRT runtime and on a local Npcap installation.
 
 ---
