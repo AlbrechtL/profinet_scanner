@@ -35,17 +35,6 @@ class ScannerRunResult:
     stdout: str
     stderr: str
 
-    @property
-    def combined_output(self) -> str:
-        return f"{self.stdout}\n{self.stderr}".strip()
-
-
-def _required_option(pytestconfig: pytest.Config, name: str) -> str:
-    value = pytestconfig.getoption(name)
-    if value:
-        return value
-    pytest.skip(f"missing required lab option {name}")
-
 
 def _validate_sudo_cmd(sudo_cmd: tuple[str, ...]) -> None:
     if os.geteuid() == 0 or not sudo_cmd:
@@ -116,6 +105,24 @@ def _optional_profile_bool(profile: dict[str, object], key: str) -> bool | None:
     return value
 
 
+def _option_or_profile_string(
+    pytestconfig: pytest.Config,
+    profile: dict[str, object],
+    option_name: str,
+    profile_key: str,
+) -> str | None:
+    return pytestconfig.getoption(option_name) or _optional_profile_string(profile, profile_key)
+
+
+def _option_or_profile_int(
+    pytestconfig: pytest.Config,
+    profile: dict[str, object],
+    option_name: str,
+    profile_key: str,
+) -> int:
+    return _optional_profile_int(profile, profile_key) or pytestconfig.getoption(option_name)
+
+
 def _profile_expected_names(profile: dict[str, object]) -> tuple[str, ...] | None:
     names = profile.get("local_expected_names")
     if names is None:
@@ -149,18 +156,18 @@ def lab_config(pytestconfig: pytest.Config) -> LabConfig:
     if not scanner_bin.exists():
         pytest.skip(f"pn_scanner binary not found at {scanner_bin}")
 
-    scanner_interface = pytestconfig.getoption("scanner_interface") or _optional_profile_string(profile, "scanner_interface")
+    scanner_interface = _option_or_profile_string(pytestconfig, profile, "scanner_interface", "scanner_interface")
     if not scanner_interface:
         pytest.skip("missing required lab option scanner_interface")
 
-    remote_target = pytestconfig.getoption("remote_target") or _optional_profile_string(profile, "remote_target")
+    remote_target = _option_or_profile_string(pytestconfig, profile, "remote_target", "remote_target")
     if not remote_target:
         pytest.skip("missing required lab option remote_target")
 
     sudo_cmd_text = pytestconfig.getoption("sudo_cmd")
     sudo_cmd = tuple(shlex.split(sudo_cmd_text))
     _validate_sudo_cmd(sudo_cmd)
-    remote_expected_text = pytestconfig.getoption("remote_expected_text") or _optional_profile_string(profile, "remote_expected_text")
+    remote_expected_text = _option_or_profile_string(pytestconfig, profile, "remote_expected_text", "remote_expected_text")
     local_expected_names = _profile_expected_names(profile)
     if local_expected_names is None:
         local_expected_names = (pytestconfig.getoption("local_expected_name"),)
@@ -172,9 +179,9 @@ def lab_config(pytestconfig: pytest.Config) -> LabConfig:
     if topology_links_expected and not topology_chain:
         topology_chain = pytestconfig.getoption("topology_chain")
 
-    local_duration = _optional_profile_int(profile, "local_duration") or pytestconfig.getoption("local_duration")
-    remote_duration = _optional_profile_int(profile, "remote_duration") or pytestconfig.getoption("remote_duration")
-    topology_duration = _optional_profile_int(profile, "topology_duration") or pytestconfig.getoption("topology_duration")
+    local_duration = _option_or_profile_int(pytestconfig, profile, "local_duration", "local_duration")
+    remote_duration = _option_or_profile_int(pytestconfig, profile, "remote_duration", "remote_duration")
+    topology_duration = _option_or_profile_int(pytestconfig, profile, "topology_duration", "topology_duration")
 
     return LabConfig(
         repo_root=repo_root,
@@ -238,7 +245,3 @@ def run_scanner(lab_config: LabConfig):
         )
 
     return _run
-
-
-def normalize_whitespace(text: str) -> str:
-    return re.sub(r"\s+", " ", text).strip()

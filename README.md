@@ -368,17 +368,17 @@ These tests are intentionally meant for Linux lab hosts with real hardware and t
 
 The repository now also contains the first scaffold for a fully virtualized integration environment:
 
-- a three-device profile at `test/profiles/virtual-pnet.json`
+- a three-device profile at `test/profiles/virtual-profipp.json`
 - a dedicated compose stack at `test/docker/docker-compose.virtual.yml`
-- a first device application scaffold at `test/virtual_device/`
+- a profipp-backed device application scaffold at `test/virtual_device/`
 
 This work is intentionally staged. The scanner side is ready for a profile-driven three-device environment, and the Linux interface filter now accepts container Ethernet interfaces as long as they are up, non-loopback, and real Ethernet links.
 
-Important limitation:
+Current limitation:
 
-- The public `rtlabs-com/p-net` GitHub repository is an evaluation package and states that it does not contain the port sources required to build a runnable Linux device.
-- Because of that, `test/docker/Dockerfile.virtual-device` and `test/virtual_device/CMakeLists.txt` currently fail fast when pointed at that evaluation tree.
-- To finish the virtual device containers you will need a full p-net delivery with Linux porting sources, or a different PROFINET device implementation.
+- The profipp-based runtime is validated only as a single-interface virtual device path so far.
+- The compose stack is still a simple bridge network and does not yet model true multi-port topology links.
+- Topology-mode expectations therefore remain disabled in the virtual profile.
 
 What is already usable:
 
@@ -387,7 +387,7 @@ What is already usable:
 
 What is not complete yet:
 
-- The virtual device image is a scaffold, not a validated runnable image.
+- The virtual environment is not yet a full topology simulation.
 - The topology path still depends on exposing LLDP or PDPort peer data in a way that matches the scanner parser.
 
 ---

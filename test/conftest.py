@@ -3,12 +3,6 @@ from __future__ import annotations
 import pytest
 
 
-DEFAULT_TOPOLOGY_CHAIN = (
-    "testxasensorf28b --[port-001 <-> port-009]-- ie-sw-al24m-16gt-8gesfp "
-    "--[port-011 <-> port-001]-- desktop-sj9ndpi"
-)
-
-
 def pytest_addoption(parser: pytest.Parser) -> None:
     group = parser.getgroup("profinet-lab")
     group.addoption(
@@ -41,7 +35,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         default=None,
         help=(
             "Optional JSON file describing scanner-interface, remote-target, expected "
-            "station names, topology chain, and durations for a lab or virtual setup."
+            "station names, optional topology expectations, and durations for a lab or virtual setup."
         ),
     )
     group.addoption(
@@ -59,8 +53,8 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     group.addoption(
         "--topology-chain",
         action="store",
-        default=DEFAULT_TOPOLOGY_CHAIN,
-        help="Expected topology chain text for topology mode assertions.",
+        default="",
+        help="Expected topology chain text for topology mode assertions when no profile provides it.",
     )
     group.addoption(
         "--local-duration",

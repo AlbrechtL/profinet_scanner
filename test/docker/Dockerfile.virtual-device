@@ -1,44 +1,51 @@
-FROM alpine:latest
+FROM debian:bookworm-slim
 
-ARG PNET_SDK_URL=https://github.com/rtlabs-com/p-net/releases/download/public%2Fv1.0.2/p-net-1.0.2-Linux-x86_64.zip
+ARG PROFIPP_REPO_URL=https://github.com/langmo/profipp.git
+ARG PROFIPP_REF=master
 
-RUN apk add --no-cache \
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    build-essential \
     ca-certificates \
-    gcompat \
-    libgcc \
-    libstdc++ \
-    unzip \
-    wget
+    cmake \
+    git \
+    iproute2 \
+    libsnmp-dev \
+    pkg-config && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
 
 COPY test /workspace/test
 
-RUN mkdir -p /tmp/pnet-sdk-download && \
-    wget -O /tmp/pnet-sdk-download/p-net-sdk.zip "${PNET_SDK_URL}" && \
-    unzip /tmp/pnet-sdk-download/p-net-sdk.zip -d /tmp/pnet-sdk-download && \
-    sdk_dir="$(find /tmp/pnet-sdk-download -mindepth 1 -maxdepth 1 -type d | head -n 1)" && \
-    test -n "${sdk_dir}" && \
-    cp -R "${sdk_dir}" /opt/p-net-sdk
+RUN git clone "${PROFIPP_REPO_URL}" /tmp/profipp && \
+    cd /tmp/profipp && \
+    git checkout "${PROFIPP_REF}"
 
-RUN test -f /opt/p-net-sdk/cmake/PNetConfig.cmake || \
-    (echo "A usable P-Net Linux SDK was not found. Set PNET_SDK_URL to a downloadable Linux SDK zip from rtlabs-com/p-net releases." >&2 && exit 1)
+RUN cmake -S /tmp/profipp -B /tmp/profipp-build \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=/usr/local \
+        -DPNET_MAX_PHYSICAL_PORTS=4 && \
+    cmake --build /tmp/profipp-build --parallel && \
+    cmake --install /tmp/profipp-build
 
-RUN printf '#!/bin/sh\nexit 0\n' > /usr/local/bin/set_network_parameters \
-    && chmod +x /usr/local/bin/set_network_parameters \
-    && printf '#!/bin/sh\nexit 0\n' > /usr/local/bin/set_profinet_leds \
+RUN cmake -S /workspace/test/virtual_device -B /tmp/virtual-device-build \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_PREFIX_PATH=/usr/local && \
+    cmake --build /tmp/virtual-device-build --parallel && \
+    cmake --install /tmp/virtual-device-build
+
+RUN printf '#!/bin/sh\nexit 0\n' > /usr/local/bin/set_profinet_leds \
     && chmod +x /usr/local/bin/set_profinet_leds
 
 RUN printf '%s\n' \
     '#!/bin/sh' \
     'set -eu' \
     'mkdir -p /var/lib/pn-device' \
-    'exec /usr/local/bin/pn_dev -v -i "${DEVICE_INTERFACE:-eth0}" -s "${DEVICE_STATION_NAME:-pn-device}" -p /var/lib/pn-device' \
+    'exec /usr/local/bin/profipp_virtual_device "$@"' \
     > /usr/local/bin/pn-device-entrypoint \
     && chmod +x /usr/local/bin/pn-device-entrypoint
 
 WORKDIR /workspace
-
-RUN cp /opt/p-net-sdk/bin/pn_dev /usr/local/bin/pn_dev
 
 ENTRYPOINT ["/usr/local/bin/pn-device-entrypoint"]
